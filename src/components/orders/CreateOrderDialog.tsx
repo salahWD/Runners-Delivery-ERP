@@ -1,0 +1,474 @@
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
+import { z } from 'zod';
+
+const orderSchema = z.object({
+  client_id: z.string().min(1, "Client is required"),
+  address: z.string().min(1, "Address is required").max(255),
+  order_amount_usd: z.number().min(0),
+  order_amount_lbp: z.number().min(0),
+  delivery_fee_usd: z.number().min(0),
+  delivery_fee_lbp: z.number().min(0),
+  fulfillment: z.enum(['InHouse', 'ThirdParty']),
+});
+
+interface CreateOrderDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  orderType?: "ecom" | "instant";
+}
+
+const CreateOrderDialog = ({ open, onOpenChange, orderType }: CreateOrderDialogProps) => {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [formData, setFormData] = useState({
+    client_id: '',
+    voucher_no: '',
+    customer_phone: '',
+    customer_name: '',
+    address: '',
+    order_amount_usd: 0,
+    order_amount_lbp: 0,
+    delivery_fee_usd: 0,
+    delivery_fee_lbp: 0,
+    fulfillment: 'InHouse' as 'InHouse' | 'ThirdParty',
+    driver_id: '',
+    third_party_id: '',
+    payment_type: 'statement' as 'cash' | 'statement',
+    notes: '',
+  });
+
+  const { data: clients } = useQuery({
+    queryKey: ['clients'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('clients').select('*').order('name');
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: drivers } = useQuery({
+    queryKey: ['drivers-active'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('drivers')
+        .select('*')
+        .eq('active', true)
+        .order('name');
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: thirdParties } = useQuery({
+    queryKey: ['third-parties-active'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('third_parties')
+        .select('*')
+        .eq('active', true)
+        .order('name');
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const createOrderMutation = useMutation({
+    mutationFn: async (data: any) => {
+      // Handle customer creation/update
+      let customerId = null;
+      if (data.customer_phone) {
+        const { data: existingCustomer } = await supabase
+          .from('customers')
+          .select('id')
+          .eq('phone', data.customer_phone)
+          .maybeSingle();
+
+        if (existingCustomer) {
+          customerId = existingCustomer.id;
+          await supabase
+            .from('customers')
+            .update({
+              name: data.customer_name || null,
+              address: data.address,
+            })
+            .eq('id', customerId);
+        } else {
+          const { data: newCustomer, error } = await supabase
+            .from('customers')
+            .insert({
+              phone: data.customer_phone,
+              name: data.customer_name || null,
+              address: data.address,
+            })
+            .select()
+            .single();
+
+          if (error) throw error;
+          customerId = newCustomer.id;
+        }
+      }
+
+      // Get client and rules
+      const { data: clientData, error: clientError } = await supabase
+        .from('clients')
+        .select('*, client_rules(*)')
+        .eq('id', data.client_id)
+        .single();
+
+      if (clientError) throw clientError;
+
+      const clientRule = clientData.client_rules?.[0];
+      
+      // Generate OrderID
+      const orderIdPrefix = clientData.type === 'Ecom' ? 'EC' : 'ORD';
+      const orderId = `${orderIdPrefix}-${Date.now()}`;
+
+      // Use provided delivery fee or default from client rules
+      const deliveryFeeUSD = data.delivery_fee_usd || clientRule?.default_fee_usd || 0;
+      const deliveryFeeLBP = data.delivery_fee_lbp || clientRule?.default_fee_lbp || 0;
+
+      // Calculate amount due to client based on fee rule
+      let amountDueUSD = data.order_amount_usd;
+      if (clientRule?.fee_rule === 'DEDUCT') {
+        amountDueUSD = data.order_amount_usd - deliveryFeeUSD;
+      }
+
+      const orderData = {
+        order_id: orderId,
+        order_type: orderType || 'ecom',
+        voucher_no: data.voucher_no || null,
+        client_id: data.client_id,
+        customer_id: customerId,
+        client_type: clientData.type,
+        address: data.address,
+        order_amount_usd: data.order_amount_usd,
+        order_amount_lbp: data.order_amount_lbp,
+        delivery_fee_usd: deliveryFeeUSD,
+        delivery_fee_lbp: deliveryFeeLBP,
+        amount_due_to_client_usd: amountDueUSD,
+        client_fee_rule: clientRule?.fee_rule || 'ADD_ON',
+        fulfillment: data.fulfillment,
+        driver_id: data.fulfillment === 'InHouse' ? (data.driver_id || null) : null,
+        third_party_id: data.fulfillment === 'ThirdParty' ? (data.third_party_id || null) : null,
+        status: 'New' as const,
+        entered_by: user?.id,
+        notes: data.notes || null,
+        prepaid_by_company: data.payment_type === 'cash',
+        prepaid_by_runners: false,
+        driver_paid_for_client: false,
+        prepay_amount_usd: 0,
+        prepay_amount_lbp: 0,
+        driver_paid_amount_usd: 0,
+        driver_paid_amount_lbp: 0,
+      };
+
+      const { data: newOrder, error } = await supabase
+        .from('orders')
+        .insert([orderData])
+        .select()
+        .single();
+
+      if (error) throw error;
+      return newOrder;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      toast({
+        title: "Order Created",
+        description: "The order has been created successfully.",
+      });
+      onOpenChange(false);
+      setFormData({
+        client_id: '',
+        voucher_no: '',
+        customer_phone: '',
+        customer_name: '',
+        address: '',
+        order_amount_usd: 0,
+        order_amount_lbp: 0,
+        delivery_fee_usd: 0,
+        delivery_fee_lbp: 0,
+        fulfillment: 'InHouse',
+        driver_id: '',
+        third_party_id: '',
+        payment_type: 'statement',
+        notes: '',
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    createOrderMutation.mutate(formData);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Create New E-commerce Order</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="client">Client (Business) *</Label>
+              <Select
+                value={formData.client_id}
+                onValueChange={(value) => setFormData({ ...formData, client_id: value })}
+                required
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select client" />
+                </SelectTrigger>
+                <SelectContent>
+                  {clients?.map((client) => (
+                    <SelectItem key={client.id} value={client.id}>
+                      {client.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="voucher_no">Voucher Number</Label>
+              <Input
+                id="voucher_no"
+                value={formData.voucher_no}
+                onChange={(e) => setFormData({ ...formData, voucher_no: e.target.value })}
+                placeholder="Order voucher/tracking #"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-4 rounded-md border p-4 bg-muted/50">
+            <h3 className="font-medium">Customer Details (Recipient)</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="customer_phone">Customer Phone *</Label>
+                <Input
+                  id="customer_phone"
+                  value={formData.customer_phone}
+                  onChange={(e) => setFormData({ ...formData, customer_phone: e.target.value })}
+                  placeholder="Phone number"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="customer_name">Customer Name</Label>
+                <Input
+                  id="customer_name"
+                  value={formData.customer_name}
+                  onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
+                  placeholder="Recipient name"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4 rounded-md border p-4 bg-muted/50">
+            <h3 className="font-medium">Payment Type *</h3>
+            <Select
+              value={formData.payment_type}
+              onValueChange={(value: 'cash' | 'statement') =>
+                setFormData({ ...formData, payment_type: value })
+              }
+              required
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="cash">Cash-Based (Pay client upfront)</SelectItem>
+                <SelectItem value="statement">Statement-Based (Pay via statement)</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {formData.payment_type === 'cash'
+                ? 'Client receives cash immediately when bringing the order'
+                : 'Client receives payment based on periodic statements'}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="fulfillment">Delivery Method *</Label>
+              <Select
+                value={formData.fulfillment}
+                onValueChange={(value: 'InHouse' | 'ThirdParty') =>
+                  setFormData({ ...formData, fulfillment: value })
+                }
+                required
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="InHouse">In-House Driver</SelectItem>
+                  <SelectItem value="ThirdParty">Third-Party Partner</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {formData.fulfillment === 'InHouse' && (
+              <div className="space-y-2">
+                <Label htmlFor="driver">Assign Driver</Label>
+                <Select
+                  value={formData.driver_id}
+                  onValueChange={(value) => setFormData({ ...formData, driver_id: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Optional - assign later" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {drivers?.map((driver) => (
+                      <SelectItem key={driver.id} value={driver.id}>
+                        {driver.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {formData.fulfillment === 'ThirdParty' && (
+              <div className="space-y-2">
+                <Label htmlFor="third_party">Third Party Company</Label>
+                <Select
+                  value={formData.third_party_id}
+                  onValueChange={(value) => setFormData({ ...formData, third_party_id: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Optional - assign later" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {thirdParties?.map((tp) => (
+                      <SelectItem key={tp.id} value={tp.id}>
+                        {tp.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="address">Delivery Address *</Label>
+            <Input
+              id="address"
+              value={formData.address}
+              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+              required
+              placeholder="Enter delivery address"
+            />
+          </div>
+
+          <div className="space-y-4 rounded-md border p-4">
+            <h3 className="font-medium">Order Amounts (enter in one or both currencies)</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="amount_usd">Order Amount (USD)</Label>
+                <Input
+                  id="amount_usd"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.order_amount_usd}
+                  onChange={(e) =>
+                    setFormData({ ...formData, order_amount_usd: parseFloat(e.target.value) || 0 })
+                  }
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="amount_lbp">Order Amount (LBP)</Label>
+                <Input
+                  id="amount_lbp"
+                  type="number"
+                  step="1"
+                  min="0"
+                  value={formData.order_amount_lbp}
+                  onChange={(e) =>
+                    setFormData({ ...formData, order_amount_lbp: parseInt(e.target.value) || 0 })
+                  }
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4 rounded-md border p-4">
+            <h3 className="font-medium">Delivery Fee (will use client default if left at 0)</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="fee_usd">Delivery Fee (USD)</Label>
+                <Input
+                  id="fee_usd"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.delivery_fee_usd}
+                  onChange={(e) =>
+                    setFormData({ ...formData, delivery_fee_usd: parseFloat(e.target.value) || 0 })
+                  }
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="fee_lbp">Delivery Fee (LBP)</Label>
+                <Input
+                  id="fee_lbp"
+                  type="number"
+                  step="1"
+                  min="0"
+                  value={formData.delivery_fee_lbp}
+                  onChange={(e) =>
+                    setFormData({ ...formData, delivery_fee_lbp: parseInt(e.target.value) || 0 })
+                  }
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="notes">Notes</Label>
+            <Input
+              id="notes"
+              value={formData.notes}
+              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              placeholder="Optional notes"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={createOrderMutation.isPending}>
+              {createOrderMutation.isPending ? 'Creating...' : 'Create Order'}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+export default CreateOrderDialog;
