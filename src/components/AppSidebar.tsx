@@ -72,6 +72,7 @@ const navGroups: NavGroup[] = [
     items: [
       { icon: Truck, label: "Drivers", path: "/drivers" },
       { icon: Building2, label: "Third Parties", path: "/third-parties" },
+      { icon: Truck, label: "Track", path: "/track" },
     ],
   },
   {
@@ -114,7 +115,7 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
   const isAdmin = role === "admin";
 
   const isActive = (path: string) => location.pathname === path;
-  const isGroupActive = (group: NavGroup) => 
+  const isGroupActive = (group: NavGroup) =>
     group.items.some(item => location.pathname === item.path);
 
   const toggleGroup = (label: string) => {
