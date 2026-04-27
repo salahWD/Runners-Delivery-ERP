@@ -69,18 +69,18 @@ export default function EditExpenseDialog({ open, onOpenChange, expense }: EditE
   const mutation = useMutation({
     mutationFn: async () => {
       if (!expense) return;
-      
+
       const newAmountUsd = currency === 'USD' ? Number(amount) : 0;
       const newAmountLbp = currency === 'LBP' ? Number(amount) : 0;
       const oldAmountUsd = Number(expense.amount_usd || 0);
       const oldAmountLbp = Number(expense.amount_lbp || 0);
-      
+
       // Calculate the difference (new - old)
       // If new > old, we need more cash out (positive diff)
       // If new < old, we need less cash out (negative diff)
       const diffUsd = newAmountUsd - oldAmountUsd;
       const diffLbp = newAmountLbp - oldAmountLbp;
-      
+
       const expenseData = {
         date,
         category_id: categoryId,
@@ -110,6 +110,19 @@ export default function EditExpenseDialog({ open, onOpenChange, expense }: EditE
           });
           if (oldCashboxError) throw oldCashboxError;
 
+          const { error: cashboxTransactionError1 } = await (supabase.rpc as any)('add_cashbox_transaction', {
+            transaction_type: 'IN',
+            amount_usd: oldAmountUsd.toString(),
+            amount_lbp: oldAmountLbp.toString(),
+            note: "updated expense - reversing old expense amount",
+            order_ref: null,
+            driver_id: null,
+            client_id: null,
+            third_party_id: null,
+          });
+
+          if (cashboxTransactionError1) throw cashboxTransactionError1;
+
           // Add new expense to new date
           const { error: newCashboxError } = await (supabase.rpc as any)('update_cashbox_atomic', {
             p_date: date,
@@ -119,6 +132,19 @@ export default function EditExpenseDialog({ open, onOpenChange, expense }: EditE
             p_cash_out_lbp: newAmountLbp,
           });
           if (newCashboxError) throw newCashboxError;
+
+          const { error: cashboxTransactionError2 } = await (supabase.rpc as any)('add_cashbox_transaction', {
+            transaction_type: 'OUT',
+            amount_usd: newAmountUsd.toString(),
+            amount_lbp: newAmountLbp.toString(),
+            note: "updated expense - adding new expense amount",
+            order_ref: null,
+            driver_id: null,
+            client_id: null,
+            third_party_id: null,
+          });
+
+          if (cashboxTransactionError2) throw cashboxTransactionError2;
         } else {
           // Same date, just apply the difference
           const { error: cashboxError } = await (supabase.rpc as any)('update_cashbox_atomic', {
@@ -129,6 +155,20 @@ export default function EditExpenseDialog({ open, onOpenChange, expense }: EditE
             p_cash_out_lbp: diffLbp,
           });
           if (cashboxError) throw cashboxError;
+
+
+          const { error: cashboxTransactionError } = await (supabase.rpc as any)('add_cashbox_transaction', {
+            transaction_type: 'OUT',
+            amount_usd: diffUsd.toString(),
+            amount_lbp: diffLbp.toString(),
+            note: "adding expense difference via update",
+            order_ref: null,
+            driver_id: null,
+            client_id: null,
+            third_party_id: null,
+          });
+
+          if (cashboxTransactionError) throw cashboxTransactionError;
         }
       } else if (date !== expense.date) {
         // Amount same but date changed
@@ -141,6 +181,20 @@ export default function EditExpenseDialog({ open, onOpenChange, expense }: EditE
         });
         if (oldCashboxError) throw oldCashboxError;
 
+
+        const { error: cashboxTransactionError1 } = await (supabase.rpc as any)('add_cashbox_transaction', {
+          transaction_type: 'IN',
+          amount_usd: oldAmountUsd.toString(),
+          amount_lbp: oldAmountLbp.toString(),
+          note: "updated expense - reversing old expense amount due to date change",
+          order_ref: null,
+          driver_id: null,
+          client_id: null,
+          third_party_id: null,
+        });
+
+        if (cashboxTransactionError1) throw cashboxTransactionError1;
+
         const { error: newCashboxError } = await (supabase.rpc as any)('update_cashbox_atomic', {
           p_date: date,
           p_cash_in_usd: 0,
@@ -149,6 +203,20 @@ export default function EditExpenseDialog({ open, onOpenChange, expense }: EditE
           p_cash_out_lbp: newAmountLbp,
         });
         if (newCashboxError) throw newCashboxError;
+
+
+        const { error: cashboxTransactionError2 } = await (supabase.rpc as any)('add_cashbox_transaction', {
+          transaction_type: 'OUT',
+          amount_usd: newAmountUsd.toString(),
+          amount_lbp: newAmountLbp.toString(),
+          note: "updated expense - adding new expense amount due to date change",
+          order_ref: null,
+          driver_id: null,
+          client_id: null,
+          third_party_id: null,
+        });
+
+        if (cashboxTransactionError2) throw cashboxTransactionError2;
       }
     },
     onSuccess: () => {

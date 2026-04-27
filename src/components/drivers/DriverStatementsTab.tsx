@@ -49,6 +49,7 @@ export function DriverStatementsTab() {
     queryFn: async () => {
       const { data, error } = await supabase.from('drivers').select('*').order('name');
       if (error) throw error;
+      console.log(data);
       return data;
     },
   });
@@ -257,6 +258,18 @@ export function DriverStatementsTab() {
 
       if (cashboxError) throw cashboxError;
 
+      const { error: cashboxTransactionError } = await (supabase.rpc as any)('add_cashbox_transaction', {
+        transaction_type: (cashInUsd - cashOutUsd) + (cashInLbp - cashOutLbp) > 0 ? "IN" : "OUT",
+        amount_usd: (cashInUsd - cashOutUsd).toString(),
+        amount_lbp: (cashInLbp - cashOutLbp).toString(),
+        note: `Statement ${statementIdData} issued for driver ${drivers?.find(d => d.id === selectedDriver)?.name || selectedDriver}. Net due: $${netDueUsd.toFixed(2)} and ${netDueLbp.toLocaleString()} LL. Orders: ${orderRefs.join(', ')}.`,
+        order_ref: statementIdData,
+        driver_id: selectedDriver,
+        client_id: null,
+        third_party_id: null,
+      });
+
+      if (cashboxTransactionError) throw cashboxTransactionError;
       // Use atomic wallet update
       // This zeros out the driver's wallet by subtracting what we collected and adding back refunds
       const { error: walletError } = await (supabase.rpc as any)('update_driver_wallet_atomic', {
@@ -785,8 +798,10 @@ export function DriverStatementsTab() {
                       <TableHead className="py-2">Date</TableHead>
                       <TableHead className="py-2">Order</TableHead>
                       <TableHead className="py-2">Client</TableHead>
-                      <TableHead className="py-2 text-right">Collected</TableHead>
+                      <TableHead className="py-2 text-right">Amount</TableHead>
                       <TableHead className="py-2 text-right">Fee</TableHead>
+                      <TableHead className="py-2 text-right">Collected</TableHead>
+                      <TableHead className="py-2 text-right">Note</TableHead>
                       <TableHead className="py-2 text-right">Driver Paid</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -808,8 +823,8 @@ export function DriverStatementsTab() {
                           <TableCell className="py-1.5">{order.clients?.name}</TableCell>
                           <TableCell className="py-1.5 text-right font-mono">
                             {formatDualAmount(
-                              Number(order.collected_amount_usd || 0),
-                              Number(order.collected_amount_lbp || 0)
+                              Number(order.order_amount_usd || 0),
+                              Number(order.order_amount_lbp || 0)
                             )}
                           </TableCell>
                           <TableCell className="py-1.5 text-right font-mono text-status-success">
@@ -817,6 +832,15 @@ export function DriverStatementsTab() {
                               Number(order.delivery_fee_usd || 0),
                               Number(order.delivery_fee_lbp || 0)
                             )}
+                          </TableCell>
+                          <TableCell className="py-1.5 text-right font-mono">
+                            {formatDualAmount(
+                              Number(order.collected_amount_usd || 0),
+                              Number(order.collected_amount_lbp || 0)
+                            )}
+                          </TableCell>
+                          <TableCell className="py-1.5 text-right font-mono">
+                            {order.notes ?? "-"}
                           </TableCell>
                           <TableCell className="py-1.5 text-right font-mono text-status-info">
                             {order.driver_paid_for_client

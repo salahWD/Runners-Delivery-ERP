@@ -3,7 +3,7 @@ CREATE TYPE client_type AS ENUM ('Ecom', 'Restaurant', 'Individual');
 CREATE TYPE currency_type AS ENUM ('USD', 'LBP');
 CREATE TYPE fee_rule_type AS ENUM ('ADD_ON', 'DEDUCT', 'INCLUDED');
 CREATE TYPE transaction_type AS ENUM ('Credit', 'Debit');
-CREATE TYPE order_status AS ENUM ('New', 'Assigned', 'PickedUp', 'Delivered', 'DriverCollected', 'CustomerCollected', 'PaidDueByDriver', 'Returned', 'Cancelled');
+CREATE TYPE order_status AS ENUM ('New', 'Assigned', 'PickedUp', 'Delivered', 'DriverCollected', 'CustomerCollected', 'Returned', 'Cancelled');
 CREATE TYPE fulfillment_type AS ENUM ('InHouse', 'ThirdParty');
 CREATE TYPE remit_status AS ENUM ('Pending', 'Collected');
 CREATE TYPE third_party_status AS ENUM ('New', 'With3P', 'Delivered', 'Paid');

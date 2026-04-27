@@ -78,24 +78,24 @@ const DriverRemittanceDialog = ({ driver, open, onOpenChange }: DriverRemittance
           // - At remittance, we refund the driver what they paid
           totalDriverPaidRefundUSD += Number(order.driver_paid_amount_usd || 0);
           totalDriverPaidRefundLBP += Number(order.driver_paid_amount_lbp || 0);
-          
+
           // Delivery fees are still income (paid by client, not customer)
           totalDeliveryFeeUSD += Number(order.delivery_fee_usd);
           totalDeliveryFeeLBP += Number(order.delivery_fee_lbp);
-          
+
           // No order amount to credit to client (already handled when driver paid)
         } else {
           // Normal orders: driver collected cash from customer
           const collectedUSD = Number(order.order_amount_usd) + Number(order.delivery_fee_usd);
           const collectedLBP = Number(order.order_amount_lbp) + Number(order.delivery_fee_lbp);
-          
+
           totalCollectedUSD += collectedUSD;
           totalCollectedLBP += collectedLBP;
-          
+
           // Order amount only (for client credit)
           totalOrderAmountUSD += Number(order.order_amount_usd);
           totalOrderAmountLBP += Number(order.order_amount_lbp);
-          
+
           // Delivery fees (for income)
           totalDeliveryFeeUSD += Number(order.delivery_fee_usd);
           totalDeliveryFeeLBP += Number(order.delivery_fee_lbp);
@@ -107,7 +107,7 @@ const DriverRemittanceDialog = ({ driver, open, onOpenChange }: DriverRemittance
       // If netDebit is negative: we owe driver (cash out)
       const netDebitUSD = totalCollectedUSD - totalDriverPaidRefundUSD;
       const netDebitLBP = totalCollectedLBP - totalDriverPaidRefundLBP;
-      
+
       const cashInUsd = netDebitUSD > 0 ? netDebitUSD : 0;
       const cashInLbp = netDebitLBP > 0 ? netDebitLBP : 0;
       const cashOutUsd = netDebitUSD < 0 ? Math.abs(netDebitUSD) : 0;
@@ -124,6 +124,19 @@ const DriverRemittanceDialog = ({ driver, open, onOpenChange }: DriverRemittance
       });
 
       if (cashboxError) throw cashboxError;
+
+      const { error: cashboxTransactionError } = await (supabase.rpc as any)('add_cashbox_transaction', {
+        transaction_type: (cashInUsd - cashOutUsd) + (cashInLbp - cashOutLbp) > 0 ? "IN" : "OUT",
+        amount_usd: (cashInUsd - cashOutUsd).toString(),
+        amount_lbp: (cashInLbp - cashOutLbp).toString(),
+        note: "Driver remittance for " + ordersToRemit.length + ` orders. Collected: $${totalCollectedUSD.toFixed(2)} / ${totalCollectedLBP.toLocaleString()} LL. Refund to driver: $${totalDriverPaidRefundUSD.toFixed(2)} / ${totalDriverPaidRefundLBP.toLocaleString()} LL. Notes: ${searchTerm || 'N/A'}`,
+        order_ref: ordersToRemit.map((o: any) => o.order_type === 'ecom' ? (o.voucher_no || o.order_id) : o.order_id).join(', '),
+        driver_id: driver.id,
+        client_id: null,
+        third_party_id: null,
+      });
+
+      if (cashboxTransactionError) throw cashboxTransactionError;
 
       // Debit driver wallet for total collected (if any)
       if (totalCollectedUSD > 0 || totalCollectedLBP > 0) {
@@ -170,7 +183,7 @@ const DriverRemittanceDialog = ({ driver, open, onOpenChange }: DriverRemittance
       for (const [clientId, clientOrders] of Object.entries(ordersByClient)) {
         const clientTotalUSD = (clientOrders as any[]).reduce((sum, o) => sum + Number(o.order_amount_usd), 0);
         const clientTotalLBP = (clientOrders as any[]).reduce((sum, o) => sum + Number(o.order_amount_lbp), 0);
-        
+
         if (clientTotalUSD > 0 || clientTotalLBP > 0) {
           const orderIds = (clientOrders as any[]).map(o => o.order_type === 'ecom' ? (o.voucher_no || o.order_id) : o.order_id).join(', ');
           await supabase.from('client_transactions').insert({
@@ -209,10 +222,10 @@ const DriverRemittanceDialog = ({ driver, open, onOpenChange }: DriverRemittance
 
       // Auto-generate driver statement
       const { data: statementIdData } = await supabase.rpc('generate_driver_statement_id');
-      
+
       if (statementIdData) {
         const orderRefs = ordersToRemit.map(o => o.order_type === 'ecom' ? (o.voucher_no || o.order_id) : o.order_id);
-        
+
         await supabase.from('driver_statements').insert({
           driver_id: driver.id,
           statement_id: statementIdData,
@@ -233,7 +246,7 @@ const DriverRemittanceDialog = ({ driver, open, onOpenChange }: DriverRemittance
           created_by: user?.id,
         });
       }
-    
+
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['drivers'] });
@@ -269,12 +282,12 @@ const DriverRemittanceDialog = ({ driver, open, onOpenChange }: DriverRemittance
 
   const calculateTotals = () => {
     const selected = pendingOrders?.filter((o: any) => selectedOrders.includes(o.id)) || [];
-    
+
     return selected.reduce(
       (acc: any, o: any) => {
         const isCompanyPaid = o.company_paid_for_order === true;
         const isDriverPaid = o.driver_paid_for_client === true;
-        
+
         if (isCompanyPaid) {
           // Company-paid orders: no collection, no refund - just track delivery fees
           return {
@@ -304,8 +317,8 @@ const DriverRemittanceDialog = ({ driver, open, onOpenChange }: DriverRemittance
           };
         }
       },
-      { 
-        totalCollectionUsd: 0, 
+      {
+        totalCollectionUsd: 0,
         totalCollectionLbp: 0,
         orderAmountsUsd: 0,
         orderAmountsLbp: 0,
@@ -405,9 +418,9 @@ const DriverRemittanceDialog = ({ driver, open, onOpenChange }: DriverRemittance
                       const collectLbp = isDriverPaid ? 0 : Number(order.order_amount_lbp) + Number(order.delivery_fee_lbp);
                       const refundUsd = isDriverPaid ? Number(order.driver_paid_amount_usd || 0) : 0;
                       const refundLbp = isDriverPaid ? Number(order.driver_paid_amount_lbp || 0) : 0;
-                      
+
                       return (
-                        <TableRow 
+                        <TableRow
                           key={order.id}
                           className={selectedOrders.includes(order.id) ? 'bg-muted/50' : ''}
                         >

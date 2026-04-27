@@ -321,7 +321,7 @@ export function EcomOrderForm() {
       amount_due_to_client_usd: "",
       prepaid_by_company: false,
       fulfillment: "InHouse",
-      third_party_id: "",
+      third_party_id: null,
       third_party_fee_usd: "",
     },
   ]);
@@ -368,7 +368,7 @@ export function EcomOrderForm() {
         amount_due_to_client_usd: "",
         prepaid_by_company: false,
         fulfillment: "InHouse",
-        third_party_id: "",
+        third_party_id: null,
         third_party_fee_usd: "",
       },
     ]);
@@ -480,6 +480,30 @@ export function EcomOrderForm() {
           throw new Error('Failed to update cashbox: ' + cashboxError.message);
         }
 
+        const { error: cashboxTransactionError } = await (supabase.rpc as any)('add_cashbox_transaction', {
+          transaction_type: "OUT",
+          amount_usd: orderAmount.toString(),
+          amount_lbp: 0,
+          note: `Payment for order ${rowData.voucher_no} - (paid by company)`,
+          order_ref: rowData.voucher_no,
+          driver_id: null,
+          client_id: rowData.client_id,
+          third_party_id: null,
+        });
+
+        if (cashboxTransactionError) throw cashboxTransactionError;
+
+        const { error: clientError } = await supabase.from('client_transactions').insert({
+          client_id: rowData.client_id,
+          type: 'Debit',
+          amount_usd: orderAmount,
+          amount_lbp: 0,
+          order_ref: rowData.voucher_no,
+          note: `Payment for order ${rowData.voucher_no} - (paid by company)`,
+        });
+
+        if (clientError) throw clientError;
+
         // await supabase.from('client_transactions').insert({
         //   client_id: rowData.client_id,
         //   type: 'Debit',
@@ -515,7 +539,7 @@ export function EcomOrderForm() {
             amount_due_to_client_usd: "",
             prepaid_by_company: false,
             fulfillment: "InHouse",
-            third_party_id: "",
+            third_party_id: null,
             third_party_fee_usd: "",
           }];
         }

@@ -25,11 +25,11 @@ interface OrderActionsDialogProps {
 const OrderActionsDialog = ({ order, open, onOpenChange }: OrderActionsDialogProps) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  
+
   const [statusData, setStatusData] = useState({
     status: order?.status || 'New',
   });
-  
+
   const [prepayData, setPrepayData] = useState({
     amount: 0,
     currency: 'USD' as 'USD' | 'LBP',
@@ -61,12 +61,12 @@ const OrderActionsDialog = ({ order, open, onOpenChange }: OrderActionsDialogPro
     mutationFn: async (data: any) => {
       const previousStatus = order.status;
       const isDeliveryTransition = previousStatus !== 'Delivered' && data.status === 'Delivered';
-      
+
       // Validate: Cannot mark as Delivered without a driver
       if (data.status === 'Delivered' && !order.driver_id) {
         throw new Error('Cannot mark order as Delivered without assigning a driver');
       }
-      
+
       const updateData: any = {
         status: data.status,
       };
@@ -87,35 +87,35 @@ const OrderActionsDialog = ({ order, open, onOpenChange }: OrderActionsDialogPro
       // CRITICAL: Wrap in try-catch to rollback order status if accounting fails
       if (isDeliveryTransition) {
         console.log('Order marked as delivered, processing accounting...');
-        
+
         try {
           const { data: responseData, error: functionError } = await supabase.functions.invoke('process-order-delivery', {
             body: { orderId: order.id }
           });
-          
+
           // Check for HTTP-level errors
           if (functionError) {
             throw new Error(functionError.message || 'Edge function invocation failed');
           }
-          
+
           // Check for application-level errors in the response
           if (responseData?.error) {
             throw new Error(responseData.error);
           }
-          
+
           console.log('Accounting processed successfully:', responseData);
         } catch (accountingError) {
           console.error('Accounting failed, rolling back order status:', accountingError);
-          
+
           // Rollback: Revert order status to previous state
           const { error: rollbackError } = await supabase
             .from('orders')
-            .update({ 
+            .update({
               status: previousStatus,
-              delivered_at: null 
+              delivered_at: null
             })
             .eq('id', order.id);
-          
+
           if (rollbackError) {
             console.error('CRITICAL: Failed to rollback order status:', rollbackError);
             throw new Error(
@@ -124,7 +124,7 @@ const OrderActionsDialog = ({ order, open, onOpenChange }: OrderActionsDialogPro
               `Rollback error: ${rollbackError.message}`
             );
           }
-          
+
           // Rollback succeeded, throw the original accounting error
           throw new Error(
             `Failed to process accounting entries. Order status has been reverted. ` +
@@ -173,6 +173,19 @@ const OrderActionsDialog = ({ order, open, onOpenChange }: OrderActionsDialogPro
       });
 
       if (cashboxError) throw cashboxError;
+
+      const { error: cashboxTransactionError } = await (supabase.rpc as any)('add_cashbox_transaction', {
+        transaction_type: "OUT",
+        amount_usd: amountUSD.toString(),
+        amount_lbp: amountLBP.toString(),
+        note: `Prepayment for order ${order.order_id}`,
+        order_ref: order.order_id,
+        driver_id: null,
+        client_id: order.client_id,
+        third_party_id: null,
+      });
+
+      if (cashboxTransactionError) throw cashboxTransactionError;
 
       // 2. Accounting: Expense → PrepaidFloat
       await supabase.from('accounting_entries').insert({

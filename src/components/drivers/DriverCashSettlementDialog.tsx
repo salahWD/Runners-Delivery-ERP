@@ -103,12 +103,25 @@ export default function DriverCashSettlementDialog({ open, onOpenChange, driver 
         });
 
         if (cashboxError) throw cashboxError;
+
+        const { error: cashboxTransactionError } = await (supabase.rpc as any)('add_cashbox_transaction', {
+          transaction_type: 'OUT',
+          amount_usd: amountUsdNum.toString(),
+          amount_lbp: amountLbpNum.toString(),
+          note: "Cash given to driver - settlement",
+          order_ref: null,
+          driver_id: driver.id,
+          client_id: null,
+          third_party_id: null,
+        });
+
+        if (cashboxTransactionError) throw cashboxTransactionError;
       } else {
         // Take cash from driver (Debit from driver, Cash in to cashbox)
         // Check if driver has enough balance
         const currentWalletUsd = Number(driver.wallet_usd || 0);
         const currentWalletLbp = Number(driver.wallet_lbp || 0);
-        
+
         if (amountUsdNum > currentWalletUsd || amountLbpNum > currentWalletLbp) {
           throw new Error('Insufficient driver balance');
         }
@@ -144,6 +157,19 @@ export default function DriverCashSettlementDialog({ open, onOpenChange, driver 
         });
 
         if (cashboxError) throw cashboxError;
+
+        const { error: cashboxTransactionError } = await (supabase.rpc as any)('add_cashbox_transaction', {
+          transaction_type: 'IN',
+          amount_usd: amountUsdNum.toString(),
+          amount_lbp: amountLbpNum.toString(),
+          note: "Cash taken from driver - settlement",
+          order_ref: null,
+          driver_id: driver.id,
+          client_id: null,
+          third_party_id: null,
+        });
+
+        if (cashboxTransactionError) throw cashboxTransactionError;
       }
     },
     onSuccess: () => {
@@ -183,7 +209,7 @@ export default function DriverCashSettlementDialog({ open, onOpenChange, driver 
             <p className="text-sm font-medium">Current Driver Balance:</p>
             <div className="flex items-center gap-4">
               <div>
-              <p className={`text-lg font-bold ${walletUsd > 0 ? 'text-green-600' : walletUsd < 0 ? 'text-red-600' : ''}`}>
+                <p className={`text-lg font-bold ${walletUsd > 0 ? 'text-green-600' : walletUsd < 0 ? 'text-red-600' : ''}`}>
                   ${Math.abs(walletUsd).toFixed(2)}
                 </p>
                 <p className="text-xs text-muted-foreground">

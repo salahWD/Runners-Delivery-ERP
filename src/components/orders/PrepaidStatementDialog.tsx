@@ -49,7 +49,7 @@ export function PrepaidStatementDialog({
     queryKey: ["prepaid-statement-orders", selectedOrderIds],
     queryFn: async () => {
       if (selectedOrderIds.length === 0) return [];
-      
+
       const { data, error } = await supabase
         .from("orders")
         .select(`
@@ -87,16 +87,16 @@ export function PrepaidStatementDialog({
   // Calculate totals
   const totals = useMemo(() => {
     if (!orders) return { orderAmountUsd: 0, orderAmountLbp: 0, feeUsd: 0, feeLbp: 0, netUsd: 0, netLbp: 0 };
-    
+
     const orderAmountUsd = orders.reduce((sum, o) => sum + Number(o.order_amount_usd), 0);
     const orderAmountLbp = orders.reduce((sum, o) => sum + Number(o.order_amount_lbp), 0);
     const feeUsd = orders.reduce((sum, o) => sum + Number(o.delivery_fee_usd), 0);
     const feeLbp = orders.reduce((sum, o) => sum + Number(o.delivery_fee_lbp), 0);
-    
+
     // Net to pay = Order Amount - Delivery Fee
     const netUsd = orderAmountUsd - feeUsd;
     const netLbp = orderAmountLbp - feeLbp;
-    
+
     return { orderAmountUsd, orderAmountLbp, feeUsd, feeLbp, netUsd, netLbp };
   }, [orders]);
 
@@ -106,7 +106,7 @@ export function PrepaidStatementDialog({
       if (!orders || orders.length === 0) throw new Error("No orders to process");
 
       const today = new Date().toISOString().split('T')[0];
-      
+
       // 1. Update cashbox atomically - cash out (net amount = order - fee)
       const { error: cashboxError } = await (supabase.rpc as any)('update_cashbox_atomic', {
         p_date: today,
@@ -118,11 +118,24 @@ export function PrepaidStatementDialog({
 
       if (cashboxError) throw cashboxError;
 
+      const { error: cashboxTransactionError } = await (supabase.rpc as any)('add_cashbox_transaction', {
+        transaction_type: "OUT",
+        amount_usd: totals.netUsd.toString(),
+        amount_lbp: totals.netLbp.toString(),
+        note: `Prepayment for ${orders.length} orders. Net amount: $${totals.netUsd.toFixed(2)} / ${totals.netLbp.toLocaleString()} LL. Paid to client ${clientName}. Order refs: ${orders.map(o => o.voucher_no || o.order_id).join(', ')}.`,
+        order_ref: orders.map(o => o.voucher_no || o.order_id).join(', '),
+        driver_id: null,
+        client_id: clientId,
+        third_party_id: null,
+      });
+
+      if (cashboxTransactionError) throw cashboxTransactionError;
+
       // 2. Create accounting entry for each order
       for (const order of orders) {
         const netUsd = Number(order.order_amount_usd) - Number(order.delivery_fee_usd);
         const netLbp = Number(order.order_amount_lbp) - Number(order.delivery_fee_lbp);
-        
+
         await supabase.from('accounting_entries').insert({
           category: 'PrepaidFloat',
           amount_usd: netUsd,
@@ -180,18 +193,18 @@ export function PrepaidStatementDialog({
 
   const generateWhatsAppText = () => {
     if (!orders) return "";
-    
+
     const companyName = companySettings?.company_name || "Our Company";
     const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-    
+
     let text = `📋 *Prepaid Order Statement*\n`;
     text += `From: ${companyName}\n`;
     text += `To: ${clientName}\n`;
     text += `Date: ${today}\n`;
     text += `━━━━━━━━━━━━━━━\n\n`;
-    
+
     text += `*Orders to be picked up:*\n\n`;
-    
+
     orders.forEach((order, index) => {
       text += `${index + 1}. *${order.voucher_no || order.order_id}*\n`;
       text += `   Customer: ${order.customers?.name || order.customers?.phone || 'N/A'}\n`;
@@ -199,7 +212,7 @@ export function PrepaidStatementDialog({
       text += `   Amount: ${formatCurrency(order.order_amount_usd, order.order_amount_lbp)}\n`;
       text += `   Fee: ${formatCurrency(order.delivery_fee_usd, order.delivery_fee_lbp)}\n\n`;
     });
-    
+
     text += `━━━━━━━━━━━━━━━\n`;
     text += `*Summary:*\n`;
     text += `Total Orders: ${orders.length}\n`;
@@ -208,7 +221,7 @@ export function PrepaidStatementDialog({
     text += `━━━━━━━━━━━━━━━\n`;
     text += `*Net Amount to Pay: ${formatCurrency(totals.netUsd, totals.netLbp)}*\n`;
     text += `(Order Amount - Delivery Fee)\n`;
-    
+
     return text;
   };
 
@@ -242,7 +255,7 @@ export function PrepaidStatementDialog({
 
         <div className="space-y-4">
           <div className="text-sm text-muted-foreground">
-            Review the orders below. When you click "Process Prepayment", the net amount (Order Amount - Delivery Fee) 
+            Review the orders below. When you click "Process Prepayment", the net amount (Order Amount - Delivery Fee)
             will be deducted from cashbox and paid to the client.
           </div>
 
@@ -306,8 +319,8 @@ export function PrepaidStatementDialog({
             <Copy className="h-4 w-4 mr-2" />
             Copy for WhatsApp
           </Button>
-          <Button 
-            onClick={() => prepayMutation.mutate()} 
+          <Button
+            onClick={() => prepayMutation.mutate()}
             disabled={prepayMutation.isPending || !orders?.length}
           >
             <Wallet className="h-4 w-4 mr-2" />

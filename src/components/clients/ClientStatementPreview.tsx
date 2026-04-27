@@ -56,10 +56,11 @@ export function ClientStatementPreview({
   const previewRef = useRef<HTMLDivElement>(null);
 
   // Filter out orders with zero order amounts - statements are only for paid/collected amounts
-  const filteredOrders = orders.filter(o => {
-    const hasOrderAmount = Number(o.order_amount_usd || 0) > 0 || Number(o.order_amount_lbp || 0) > 0;
-    return hasOrderAmount;
-  });
+  const filteredOrders = orders;
+  // const filteredOrders = orders.filter(o => {
+  //   const hasOrderAmount = Number(o.order_amount_usd || 0) > 0 || Number(o.order_amount_lbp || 0) > 0;
+  //   return hasOrderAmount;
+  // });
 
   const instantOrders = filteredOrders.filter(o => o.order_type === 'instant' || o.order_type === 'errand');
   const ecomOrders = filteredOrders.filter(o => o.order_type === 'ecom');
@@ -173,9 +174,9 @@ export function ClientStatementPreview({
                     <TableHead>Date</TableHead>
                     <TableHead>Order ID</TableHead>
                     <TableHead>Address</TableHead>
-                    <TableHead>Notes</TableHead>
                     <TableHead>Driver Paid</TableHead>
-                    <TableHead className="text-right">Order Amount</TableHead>
+                    <TableHead>Notes</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
                     <TableHead className="text-right">Fee</TableHead>
                     <TableHead className="text-right">Due</TableHead>
                   </TableRow>
@@ -193,12 +194,12 @@ export function ClientStatementPreview({
                         <TableCell>{format(new Date(order.created_at), 'MMM dd')}</TableCell>
                         <TableCell className="font-mono">{order.order_id}</TableCell>
                         <TableCell className="max-w-[150px] truncate">{order.address}</TableCell>
-                        <TableCell className="max-w-[120px] truncate text-muted-foreground">{order.notes || '-'}</TableCell>
                         <TableCell>
                           {order.driver_paid_for_client ? (
                             <Badge variant="outline" className="text-xs text-blue-600">Yes</Badge>
                           ) : '-'}
                         </TableCell>
+                        <TableCell className="max-w-[120px] truncate text-muted-foreground">{order.notes || '-'}</TableCell>
                         <TableCell className="text-right">
                           {formatAmount(orderUsd, orderLbp)}
                         </TableCell>
@@ -241,7 +242,7 @@ export function ClientStatementPreview({
                         <TableCell>{order.customers?.name || '-'}</TableCell>
                         <TableCell>{order.customers?.phone || '-'}</TableCell>
                         <TableCell className="max-w-[150px] truncate">{order.address}</TableCell>
-                        <TableCell className="text-right">${Number(order.order_amount_usd).toFixed(2)}</TableCell>
+                        <TableCell className="text-right">${Number(order.order_amount_usd + order.delivery_fee_usd).toFixed(2)}</TableCell>
                         <TableCell className="text-right">${Number(order.delivery_fee_usd).toFixed(2)}</TableCell>
                         <TableCell className="text-right font-semibold">${due.usd.toFixed(2)}</TableCell>
                       </TableRow>
@@ -260,7 +261,7 @@ export function ClientStatementPreview({
                 <p className="text-xl font-bold">{totals.totalOrders}</p>
               </div>
               <div className="p-3 bg-muted rounded-lg">
-                <p className="text-xs text-muted-foreground">Order Amount</p>
+                <p className="text-xs text-muted-foreground">Amount</p>
                 <p className="text-lg font-bold">
                   {formatAmount(totals.totalOrderAmountUsd, totals.totalOrderAmountLbp)}
                 </p>

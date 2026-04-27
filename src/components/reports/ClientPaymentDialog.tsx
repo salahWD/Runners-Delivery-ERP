@@ -78,7 +78,7 @@ export function ClientPaymentDialog({
 
       let balanceUsd = 0;
       let balanceLbp = 0;
-      
+
       transactions?.forEach((tx: any) => {
         if (tx.type === 'Debit') {
           balanceUsd += Number(tx.amount_usd);
@@ -95,7 +95,7 @@ export function ClientPaymentDialog({
       // 3. Generate statement ID
       const { data: statementIdData, error: statementError } = await supabase
         .rpc('generate_statement_id');
-      
+
       if (statementError) throw statementError;
       const statementId = statementIdData as string;
 
@@ -127,8 +127,8 @@ export function ClientPaymentDialog({
           amount_lbp: Number(amountLbp),
           note: hasDriverPaidOrders
             ? `Payment received (Driver-paid reimbursement) - Statement ${statementId}`
-            : isCashIn 
-              ? `Payment received - Statement ${statementId}` 
+            : isCashIn
+              ? `Payment received - Statement ${statementId}`
               : `Payment made to client - Statement ${statementId}`,
           order_ref: statementId,
         });
@@ -137,7 +137,7 @@ export function ClientPaymentDialog({
 
       // 6. Update cashbox atomically based on payment direction
       const today = new Date().toISOString().split('T')[0];
-      
+
       const { error: cashboxError } = await (supabase.rpc as any)('update_cashbox_atomic', {
         p_date: today,
         p_cash_in_usd: isCashIn ? Number(amountUsd) : 0,
@@ -147,6 +147,23 @@ export function ClientPaymentDialog({
       });
 
       if (cashboxError) throw cashboxError;
+
+      const { error: cashboxTransactionError } = await (supabase.rpc as any)('add_cashbox_transaction', {
+        transaction_type: isCashIn ? "IN" : "OUT",
+        amount_usd: amountUsd.toString(),
+        amount_lbp: amountLbp.toString(),
+        note: hasDriverPaidOrders
+          ? `Payment received (Driver-paid reimbursement) for Statement ${statementId}. Orders: ${orderIds.join(', ')}. Notes: ${notes || 'N/A'}`
+          : isCashIn
+            ? `Payment received for Statement ${statementId}. Orders: ${orderIds.join(', ')}. Notes: ${notes || 'N/A'}`
+            : `Payment made to client for Statement ${statementId}. Orders: ${orderIds.join(', ')}. Notes: ${notes || 'N/A'}`,
+        order_ref: statementId,
+        driver_id: null,
+        client_id: clientId,
+        third_party_id: null,
+      });
+
+      if (cashboxTransactionError) throw cashboxTransactionError;
 
       return statementId;
     },

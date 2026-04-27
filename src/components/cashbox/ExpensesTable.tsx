@@ -63,6 +63,18 @@ export default function ExpensesTable({ expenses, showDate = false }: ExpensesTa
 
       if (cashboxError) throw cashboxError;
 
+      const { error: cashboxTransactionError } = await (supabase.rpc as any)('add_cashbox_transaction', {
+        transaction_type: 'IN',
+        amount_usd: Number(expense.amount_usd || 0).toString(),
+        amount_lbp: Number(expense.amount_lbp || 0).toString(),
+        note: "reversed expense deletion",
+        order_ref: null,
+        driver_id: null,
+        client_id: null,
+        third_party_id: null,
+      });
+
+      if (cashboxTransactionError) throw cashboxTransactionError;
       // Then delete the expense
       const { error } = await supabase
         .from('daily_expenses')
@@ -141,7 +153,7 @@ export default function ExpensesTable({ expenses, showDate = false }: ExpensesTa
                       <Pencil className="mr-2 h-4 w-4" />
                       Edit
                     </DropdownMenuItem>
-                    <DropdownMenuItem 
+                    <DropdownMenuItem
                       onClick={() => setDeleteExpense(expense)}
                       className="text-destructive focus:text-destructive"
                     >

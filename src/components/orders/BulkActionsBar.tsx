@@ -146,14 +146,17 @@ export function BulkActionsBar({ selectedIds, onClearSelection }: BulkActionsBar
 
   const updateStatusMutation = useMutation({
     mutationFn: async (status: string) => {
-      // Validate: Cannot mark as Delivered without a driver OR third party assigned
-      if (status === 'Delivered') {
-        const { data: orders } = await supabase
-          .from("orders")
-          .select("id, order_id, driver_id, third_party_id, fulfillment")
-          .in("id", selectedIds);
 
-        const ordersWithoutAssignment = orders?.filter(order =>
+      let orders = [];
+      // Validate: Cannot mark as Delivered without a driver OR third party assigned
+      if (['Delivered', 'DriverCollected'].includes(status)) {
+        // if (status === 'Delivered') {
+        const { data: ordersData } = await supabase
+          .from("orders")
+          .select("id, order_id, driver_id, third_party_id, fulfillment, company_paid_for_order, prepaid_by_runners, driver_paid_for_client, order_amount_usd, delivery_fee_usd, order_amount_lbp, delivery_fee_lbp")
+          .in("id", selectedIds);
+        orders = ordersData;
+        const ordersWithoutAssignment = ordersData?.filter(order =>
           !order.driver_id && !order.third_party_id
         ) || [];
 
@@ -164,7 +167,8 @@ export function BulkActionsBar({ selectedIds, onClearSelection }: BulkActionsBar
 
       // First update the status
       const updateData: any = { status };
-      if (status === 'Delivered') {
+      // if (status === 'Delivered') {
+      if (['Delivered', 'DriverCollected'].includes(status)) {
         updateData.delivered_at = new Date().toISOString();
       }
 
@@ -172,7 +176,8 @@ export function BulkActionsBar({ selectedIds, onClearSelection }: BulkActionsBar
       if (error) throw error;
 
       // If status is Delivered, process accounting for each order
-      if (status === 'Delivered') {
+      // if (status === 'Delivered') {
+      if (['Delivered', 'DriverCollected'].includes(status)) {
         console.log(`Processing delivery accounting for ${selectedIds.length} orders...`);
 
         // Process each order through the edge function
@@ -184,6 +189,35 @@ export function BulkActionsBar({ selectedIds, onClearSelection }: BulkActionsBar
           if (functionError) {
             console.error(`Error processing delivery for order ${orderId}:`, functionError);
             // Continue processing other orders even if one fails
+          }
+
+          const order = orders.find(o => o.id === orderId);
+          if (orders.length > 0 && !order.company_paid_for_order /* && !order.prepaid_by_runners */) {
+            const { error: walletError } = await (supabase.rpc as any)('update_driver_wallet_atomic', {
+              p_driver_id: order.driver_id,
+              p_amount_usd: order?.driver_paid_for_client ? (order.driver_paid_amount_usd * -1) : order.order_amount_usd + order.delivery_fee_usd,
+              p_amount_lbp: order?.driver_paid_for_client ? (order.driver_paid_amount_lbp * -1) : order.order_amount_lbp + order.delivery_fee_lbp,
+            });
+
+            if (walletError) {
+              console.error('Error Adding to Driver Wallet:', walletError);
+              throw new Error('Order updated but accounting failed: ' + walletError.message);
+            }
+          }
+
+          if (order.status != status) {
+            await supabase.from('order_timeline_events').insert({
+              order_id: order.id,
+              type: status === 'Assigned'
+                ? 'ASSIGNED'
+                : status === 'PickedUp'
+                  ? 'PICKED_UP'
+                  : status === 'DriverCollected'
+                    ? 'DELIVERED'
+                    : 'ORDER_CREATED', // fallback if needed
+              title: `Status changed to ${status}`,
+              description: `Order moved from ${order.status} to ${status}`,
+            });
           }
         }
       }
@@ -315,7 +349,7 @@ export function BulkActionsBar({ selectedIds, onClearSelection }: BulkActionsBar
                         setStatusOpen(false);
                       }}
                     >
-                      {status}
+                      {status == "DriverCollected" ? "Delivered" : status}
                     </CommandItem>
                   ))}
                 </CommandGroup>

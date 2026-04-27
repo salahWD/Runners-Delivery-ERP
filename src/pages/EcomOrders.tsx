@@ -148,7 +148,7 @@ const EcomOrders = () => {
       Returned: "destructive",
       Cancelled: "destructive",
     };
-    return <Badge variant={variants[status] || "default"}>{status}</Badge>;
+    return <Badge variant={variants[status] || "default"}>{status == "DriverCollected" ? "Delivered" : status}</Badge>;
   };
 
   const toggleSelectAll = () => {

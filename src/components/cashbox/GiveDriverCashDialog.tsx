@@ -100,6 +100,19 @@ export default function GiveDriverCashDialog({ open, onOpenChange, date, presele
       });
 
       if (cashboxError) throw cashboxError;
+
+      const { error: cashboxTransactionError } = await (supabase.rpc as any)('add_cashbox_transaction', {
+        transaction_type: 'OUT',
+        amount_usd: amountUsd.toString(),
+        amount_lbp: amountLbp.toString(),
+        note: `Gave cash to driver ${driver.name} via app. Notes: ${notes || 'N/A'}`,
+        order_ref: null,
+        driver_id: driverId,
+        client_id: null,
+        third_party_id: null,
+      });
+
+      if (cashboxTransactionError) throw cashboxTransactionError;
     },
     onSuccess: () => {
       toast({

@@ -61,7 +61,7 @@ export default function TakeBackCashDialog({ open, onOpenChange, driver }: TakeB
       const today = new Date().toISOString().split('T')[0];
       const amountUsd = currency === 'USD' ? amountNum : 0;
       const amountLbp = currency === 'LBP' ? amountNum : 0;
-      
+
       const { error: cashboxError } = await (supabase.rpc as any)('update_cashbox_atomic', {
         p_date: today,
         p_cash_in_usd: amountUsd,
@@ -71,6 +71,19 @@ export default function TakeBackCashDialog({ open, onOpenChange, driver }: TakeB
       });
 
       if (cashboxError) throw cashboxError;
+
+      const { error: cashboxTransactionError } = await (supabase.rpc as any)('add_cashbox_transaction', {
+        transaction_type: "IN",
+        amount_usd: amountUsd.toString(),
+        amount_lbp: amountLbp.toString(),
+        note: notes || `Cash taken back from driver ${driver.name}`,
+        order_ref: null,
+        driver_id: driver.id,
+        client_id: null,
+        third_party_id: null,
+      });
+
+      if (cashboxTransactionError) throw cashboxTransactionError;
     },
     onSuccess: () => {
       toast({

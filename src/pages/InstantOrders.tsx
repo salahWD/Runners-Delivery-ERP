@@ -78,6 +78,14 @@ const getPaymentStatus = (order: Order) => {
     return { label: "Collected", variant: "default" as const };
   }
 
+  // Normal order - we collect for client
+  if (order.status === 'DriverCollected') {
+    if (order.driver_remit_status === 'Collected') {
+      return { label: "Completed", variant: "default" as const, className: "bg-green-600" };
+    }
+    return { label: "Collected", variant: "default" as const };
+  }
+
   return { label: "Pending", variant: "secondary" as const };
 };
 
@@ -154,10 +162,11 @@ const InstantOrders = () => {
       Assigned: "outline",
       PickedUp: "default",
       Delivered: "default",
+      DriverCollected: "default",
       Returned: "destructive",
       Cancelled: "destructive",
     };
-    return <Badge variant={variants[status] || "default"}>{status}</Badge>;
+    return <Badge variant={variants[status] || "default"}>{status == "DriverCollected" ? "Delivered" : status}</Badge>;
   };
 
   const toggleSelectAll = () => {

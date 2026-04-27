@@ -184,6 +184,7 @@ const Cashbox = () => {
                     <SelectItem value="All">All</SelectItem>
                     <SelectItem value="driver">Driver</SelectItem>
                     <SelectItem value="expense">Expense</SelectItem>
+                    <SelectItem value="cashbox">Cashbox</SelectItem>
                     <SelectItem value="accounting">Accounting</SelectItem>
                   </SelectContent>
                 </Select>

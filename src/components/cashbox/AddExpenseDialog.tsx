@@ -66,6 +66,19 @@ const AddExpenseDialog = ({ open, onOpenChange, date }: AddExpenseDialogProps) =
       });
 
       if (cashboxError) throw cashboxError;
+
+      const { error: cashboxTransactionError } = await (supabase.rpc as any)('add_cashbox_transaction', {
+        transaction_type: 'OUT',
+        amount_usd: amountUsd.toString(),
+        amount_lbp: amountLbp.toString(),
+        note: notes || "expense added via app",
+        order_ref: null,
+        driver_id: null,
+        client_id: null,
+        third_party_id: null,
+      });
+
+      if (cashboxTransactionError) throw cashboxTransactionError;
     },
     onSuccess: () => {
       toast.success('Expense added successfully');

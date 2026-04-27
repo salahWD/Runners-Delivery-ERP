@@ -51,13 +51,31 @@ export default function TransactionHistoryTable({ date, type = null, search = nu
       const { data, error } = await supabase
         .from('accounting_entries')
         .select('*')
-        .gte('ts', date)
-        .lte('ts', date + 'T23:59:59')
+        .gte('ts', date.from.toISOString().split('T')[0])
+        .lte('ts', date.to.toISOString().split('T')[0] + 'T23:59:59')
         .order('ts', { ascending: false });
       if (error) throw error;
       return data;
     },
   });
+
+  // Get cashbox transactions for the date
+  const { data: cashboxTransactions } = useQuery({
+    queryKey: ['cashbox-transactions-daily', date],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('cashbox_transactions')
+        .select('*')
+        .gte('ts', date.from.toISOString().split('T')[0])
+        .lte('ts', date.to.toISOString().split('T')[0] + 'T23:59:59')
+        .order('ts', { ascending: false });
+      if (error) throw error;
+      console.log(data)
+      return data;
+    },
+  });//
+
+  // console.log(cashboxTransactions)
 
   // Get daily expenses
   const { data: expenses } = useQuery({
@@ -104,6 +122,16 @@ export default function TransactionHistoryTable({ date, type = null, search = nu
       amountUSD: t.category === 'DeliveryIncome' ? Number(t.amount_usd || 0) : -Number(t.amount_usd || 0),
       amountLBP: t.category === 'DeliveryIncome' ? Number(t.amount_lbp || 0) : -Number(t.amount_lbp || 0),
       category: 'accounting',
+      orderRef: t.order_ref,
+    })) || []),
+    ...(cashboxTransactions?.map(t => ({
+      id: t.id,
+      time: t.ts,
+      type: "Cashbox " + t.type,
+      description: t.note || t.type,
+      amountUSD: t.type === 'IN' ? Number(t.amount_usd || 0) : -Number(t.amount_usd || 0),
+      amountLBP: t.type === 'IN' ? Number(t.amount_lbp || 0) : -Number(t.amount_lbp || 0),
+      category: 'cashbox',
       orderRef: t.order_ref,
     })) || []),
     ...(expenses?.map(t => ({

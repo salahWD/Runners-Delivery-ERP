@@ -47,6 +47,19 @@ export default function CashboxTransactionDialog({ open, onOpenChange, date, typ
 
       if (cashboxError) throw cashboxError;
 
+      const { error: cashboxTransactionError } = await (supabase.rpc as any)('add_cashbox_transaction', {
+        transaction_type: type == 'in' ? 'IN' : 'OUT',
+        amount_usd: amountUsd.toString(),
+        amount_lbp: amountLbp.toString(),
+        note: notes || "added via cashbox dialog",
+        order_ref: null,
+        driver_id: null,
+        client_id: null,
+        third_party_id: null,
+      });
+
+      if (cashboxTransactionError) throw cashboxTransactionError;
+
       // Add notes if provided
       if (notes) {
         const { data: existing } = await supabase

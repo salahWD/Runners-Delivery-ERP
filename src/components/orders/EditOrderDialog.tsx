@@ -58,9 +58,9 @@ interface Order {
 }
 
 type FeePayer = 'customer' | 'client' | 'split';
-type statusTypes = "New" | "Assigned" | "PickedUp" | "Delivered" | "Returned" | "Cancelled" | "DriverCollected" | "CustomerCollected" | "PaidDueByDriver";
+type statusTypes = "New" | "Assigned" | "PickedUp" | "Delivered" | "Returned" | "Cancelled" | "DriverCollected" | "CustomerCollected";
 
-const deliveryStatuses = ['Delivered', 'DriverCollected', 'CustomerCollected', 'PaidDueByDriver'];
+const deliveryStatuses = ['Delivered', 'DriverCollected', 'CustomerCollected'];
 
 interface EditOrderDialogProps {
   order: Order;
@@ -175,7 +175,9 @@ export default function EditOrderDialog({ order, open, onOpenChange }: EditOrder
 
       // Prepare update data
       const orderAmountUsd = parseFloat(formData.order_amount_usd) || 0;
+      const orderAmountLbp = parseFloat(formData.order_amount_lbp) || 0;
       const deliveryFeeUsd = parseFloat(formData.delivery_fee_usd) || 0;
+      const deliveryFeeLbp = parseFloat(formData.delivery_fee_lbp) || 0;
       const thirdPartyFeeUsd = parseFloat(formData.third_party_fee_usd) || 0;
       const clientNetUsd = orderAmountUsd - deliveryFeeUsd;
 
@@ -243,11 +245,11 @@ export default function EditOrderDialog({ order, open, onOpenChange }: EditOrder
           throw new Error('Order updated but accounting failed: ' + functionError.message);
         }
 
-        if (!order?.company_paid_for_order && !order.prepaid_by_runners) {
+        if (!order?.company_paid_for_order && !order?.prepaid_by_runners) {
           const { error: walletError } = await (supabase.rpc as any)('update_driver_wallet_atomic', {
             p_driver_id: updateData.driver_id,
             p_amount_usd: order?.driver_paid_for_client ? (orderAmountUsd * -1) : orderAmountUsd + deliveryFeeUsd,
-            p_amount_lbp: 0,
+            p_amount_lbp: order?.driver_paid_for_client ? (orderAmountLbp * -1) : orderAmountLbp + deliveryFeeLbp,
           });
 
           if (walletError) {
@@ -273,6 +275,7 @@ export default function EditOrderDialog({ order, open, onOpenChange }: EditOrder
         title: `Status changed to ${formData.status}`,
         description: `Order moved from ${previousStatus} to ${formData.status}`,
       })
+
       if (previousStatus !== formData.status) {
         await supabase.from('order_timeline_events').insert({
           order_id: order.id,

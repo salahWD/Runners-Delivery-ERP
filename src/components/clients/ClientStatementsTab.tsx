@@ -97,7 +97,7 @@ export function ClientStatementsTab() {
         .from('orders')
         .select(`*, customers(phone, name, address), drivers(name)`)
         .eq('client_id', selectedClient)
-        .in('status', ['Delivered', 'PaidDueByDriver', 'DriverCollected'])
+        .in('status', ['Delivered', 'DriverCollected'])
         .gte('created_at', dateFrom)
         .lte('created_at', dateTo + 'T23:59:59')
         .order('created_at', { ascending: false });
@@ -112,7 +112,7 @@ export function ClientStatementsTab() {
         // EXCLUDE prepaid e-commerce orders - accounting is already settled
         // When prepaid: company pays client upfront, driver collects from customer, 
         // transaction offsets the prepayment debit - no statement needed
-        if (order.order_type === 'ecom' && order.prepaid_by_company) {
+        if (order.order_type === 'ecom' && (order.prepaid_by_company || order.prepaid_by_runners)) {
           return false;
         }
 
@@ -123,8 +123,9 @@ export function ClientStatementsTab() {
         }
 
         // For non-driver-paid orders, only include if there's an order amount
-        const hasOrderAmount = Number(order.order_amount_usd || 0) > 0 || Number(order.order_amount_lbp || 0) > 0;
-        return hasOrderAmount;
+        // const hasOrderAmount = Number(order.order_amount_usd || 0) > 0 || Number(order.order_amount_lbp || 0) > 0;
+        // return hasOrderAmount;
+        return true;
       }) || [];
     },
     enabled: !!selectedClient,
@@ -274,13 +275,13 @@ export function ClientStatementsTab() {
   const clientBalance = clientBalances?.get(selectedClient) || { usd: 0, lbp: 0 };
   const transactionBalance = clientBalances?.get(selectedClient) || { usd: 0, lbp: 0 };
 
-  const usdLbpTransactionBalance = transactionBalance.usd + (clientBalance.lbp / 100000);
-  const realBalanceUsd = usdLbpTransactionBalance /* + unpaidStatementsTotal */;
+  const realBalanceUsd = transactionBalance.usd /* + unpaidStatementsTotal */;
+  const realBalanceLbpAsUsd = transactionBalance.lbp / 100000;
 
   // Determine payment direction based on current balance:
   // If we owe the client (positive balance) = we're paying them = cash out
   // If client owes us (negative balance) = they're paying us = cash in
-  const isPayingClient = realBalanceUsd > 0;
+  const isPayingClient = realBalanceUsd + realBalanceLbpAsUsd > 0;
 
   const issueStatementMutation = useMutation({
     mutationFn: async () => {
@@ -314,7 +315,7 @@ export function ClientStatementsTab() {
       // we add a credit transaction when we make a statment so that the balance of the client can change to accept payments
       // if credited => should take money
       // if debited => should pay money
-      if (totals.totalDueToClientUsd > 0 || totals.totalDueToClientLbp > 0) {// come fix if statement has more then one order with differant type (some are company paid and some are not)
+      if (totals.totalDueToClientUsd > 0 || totals.totalDueToClientLbp > 0) {
         const { error: insertTransactionError } = await supabase.from('client_transactions').insert({
           client_id: selectedClient,
           type: 'Credit',
@@ -330,6 +331,9 @@ export function ClientStatementsTab() {
     },
     onSuccess: (statementId) => {
       toast.success(`Statement ${statementId} issued`);
+      queryClient.invalidateQueries({ queryKey: ['client-balances-all'] });
+      queryClient.invalidateQueries({ queryKey: ['client-balance-breakdown', selectedClient] });
+
       queryClient.invalidateQueries({ queryKey: ['client-pending-orders'] });
       queryClient.invalidateQueries({ queryKey: ['client-statements-history'] });
       setSelectedOrders([]);
@@ -366,6 +370,20 @@ export function ClientStatementsTab() {
       )
 
       if (cashboxError) throw cashboxError;
+
+
+      const { error: cashboxTransactionError } = await (supabase.rpc as any)('add_cashbox_transaction', {
+        transaction_type: isPayingClient ? "OUT" : 'IN',
+        amount_usd: amountUsd.toString(),
+        amount_lbp: amountLbp.toString(),
+        note: "Payment " + (isPayingClient ? "to" : "from") + ` client ${selectedClientData?.name || ''}. Method: ${paymentMethod}${paymentNotes ? ` - Notes: ${paymentNotes}` : ''}`,
+        order_ref: null,
+        driver_id: null,
+        client_id: selectedClient,
+        third_party_id: null,
+      });
+
+      if (cashboxTransactionError) throw cashboxTransactionError;
 
       // Record transaction: 
       // When we pay client (reduce our debt to them), we Debit their account

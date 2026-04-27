@@ -14,9 +14,9 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Textarea } from '@/components/ui/textarea';
-import { 
-  FileText, CheckCircle, Search, DollarSign, ChevronDown, ChevronUp, 
-  Wallet, Clock, TrendingUp, ChevronsUpDown, Check, Truck, 
+import {
+  FileText, CheckCircle, Search, DollarSign, ChevronDown, ChevronUp,
+  Wallet, Clock, TrendingUp, ChevronsUpDown, Check, Truck,
   ArrowDownLeft, ArrowUpRight, Trash2, AlertCircle, Receipt
 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -86,14 +86,14 @@ export function ThirdPartyStatementsTab() {
     queryKey: ['order-transactions-third-party', selectedThirdParty],
     queryFn: async () => {
       if (!selectedThirdParty) return [];
-      
+
       const { data, error } = await supabase
         .from('order_transactions')
         .select('*, orders(order_id, voucher_no, order_type)')
         .eq('party_type', 'THIRD_PARTY')
         .eq('party_id', selectedThirdParty)
         .order('tx_date', { ascending: false });
-      
+
       if (error) throw error;
       return data || [];
     },
@@ -109,7 +109,7 @@ export function ThirdPartyStatementsTab() {
   const filterOrders = (orderList: any[]) => {
     if (!searchTerm) return orderList;
     const search = searchTerm.toLowerCase();
-    return orderList.filter(order => 
+    return orderList.filter(order =>
       order.order_id?.toLowerCase().includes(search) ||
       order.voucher_no?.toLowerCase().includes(search) ||
       order.clients?.name?.toLowerCase().includes(search) ||
@@ -138,7 +138,7 @@ export function ThirdPartyStatementsTab() {
   // Calculate totals for selected orders
   const calculateSelectedTotals = () => {
     const selectedOrdersData = orders?.filter(o => selectedOrders.includes(o.id)) || [];
-    
+
     return selectedOrdersData.reduce((acc, order) => {
       const orderValue = Number(order.order_amount_usd || 0);
       const thirdPartyFee = Number(order.third_party_fee_usd || 0);
@@ -164,14 +164,14 @@ export function ThirdPartyStatementsTab() {
   // Calculate overall stats for all pending orders (what they owe us)
   const allPendingOrdersTotal = (orders?.filter(o => !receivedOrderIds.has(o.id)) || [])
     .reduce((sum, o) => sum + Number(o.order_amount_usd || 0) - Number(o.third_party_fee_usd || 0), 0);
-  
+
   // Get all remittance transactions (IN = received from 3P, OUT = paid to 3P)
   const remittanceIn = orderTransactions?.filter(tx => tx.direction === 'IN') || [];
   const paymentsOut = orderTransactions?.filter(tx => tx.direction === 'OUT') || [];
-  
+
   const totalReceived = remittanceIn.reduce((sum, tx) => sum + Number(tx.amount_usd || 0), 0);
   const totalPaidOut = paymentsOut.reduce((sum, tx) => sum + Number(tx.amount_usd || 0), 0);
-  
+
   // Net balance: positive = they owe us, negative = we owe them
   const netBalance = allPendingOrdersTotal - totalPaidOut;
 
@@ -218,6 +218,19 @@ export function ThirdPartyStatementsTab() {
       });
 
       if (cashboxError) throw cashboxError;
+
+      const { error: cashboxTransactionError } = await (supabase.rpc as any)('add_cashbox_transaction', {
+        transaction_type: "IN",
+        amount_usd: amountUsd.toString(),
+        amount_lbp: 0,
+        note: receiveNotes || `Remittance from ${selectedThirdPartyData?.name}`,
+        order_ref: selectedOrdersData.map(o => o.voucher_no || o.order_id).join(', '),
+        driver_id: null,
+        client_id: null,
+        third_party_id: selectedThirdParty,
+      });
+
+      if (cashboxTransactionError) throw cashboxTransactionError;
     },
     onSuccess: () => {
       toast.success('Remittance recorded successfully');
@@ -265,6 +278,19 @@ export function ThirdPartyStatementsTab() {
       });
 
       if (cashboxError) throw cashboxError;
+
+      const { error: cashboxTransactionError } = await (supabase.rpc as any)('add_cashbox_transaction', {
+        transaction_type: "OUT",
+        amount_usd: amountUsd.toString(),
+        amount_lbp: 0,
+        note: payNotes || `Payment to ${selectedThirdPartyData?.name}`,
+        order_ref: null,
+        driver_id: null,
+        client_id: null,
+        third_party_id: selectedThirdParty,
+      });
+
+      if (cashboxTransactionError) throw cashboxTransactionError;
     },
     onSuccess: () => {
       toast.success('Payment to third party recorded');
@@ -297,7 +323,7 @@ export function ThirdPartyStatementsTab() {
       // Reverse cashbox entry using atomic update with negative values
       const txDate = new Date(transaction.tx_date).toISOString().split('T')[0];
       const amountUsd = Number(transaction.amount_usd || 0);
-      
+
       const { error: cashboxError } = await (supabase.rpc as any)('update_cashbox_atomic', {
         p_date: txDate,
         p_cash_in_usd: transaction.direction === 'IN' ? -amountUsd : 0,
@@ -307,6 +333,20 @@ export function ThirdPartyStatementsTab() {
       });
 
       if (cashboxError) throw cashboxError;
+
+      const { error: cashboxTransactionError } = await (supabase.rpc as any)('add_cashbox_transaction', {
+        transaction_type: transaction.direction,
+        amount_usd: amountUsd.toString(),
+        amount_lbp: 0,
+        note: `Reversal of transaction ID ${transaction.id} for order ${transaction.orders?.voucher_no || transaction.orders?.order_id || 'N/A'}`,
+        order_ref: transaction.orders?.voucher_no || transaction.orders?.order_id || '',
+        driver_id: null,
+        client_id: null,
+        third_party_id: transaction.party_id,
+      });
+
+      if (cashboxTransactionError) throw cashboxTransactionError;
+
     },
     onSuccess: () => {
       toast.success('Transaction deleted and reversed');
@@ -328,8 +368,8 @@ export function ThirdPartyStatementsTab() {
 
   const getOrderRef = (tx: any) => {
     if (!tx.orders) return '-';
-    return tx.orders.order_type === 'ecom' 
-      ? (tx.orders.voucher_no || tx.orders.order_id) 
+    return tx.orders.order_type === 'ecom'
+      ? (tx.orders.voucher_no || tx.orders.order_id)
       : tx.orders.order_id;
   };
 
@@ -424,7 +464,7 @@ export function ThirdPartyStatementsTab() {
               </Button>
             </div>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <Card className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 border-blue-500/20">
               <CardContent className="pt-4 pb-3">
@@ -438,7 +478,7 @@ export function ThirdPartyStatementsTab() {
                 </div>
               </CardContent>
             </Card>
-            
+
             <Card className="bg-gradient-to-br from-yellow-500/10 to-yellow-600/5 border-yellow-500/20">
               <CardContent className="pt-4 pb-3">
                 <div className="flex items-center gap-2 text-yellow-600">
@@ -450,7 +490,7 @@ export function ThirdPartyStatementsTab() {
                 </div>
               </CardContent>
             </Card>
-            
+
             <Card className="bg-gradient-to-br from-green-500/10 to-green-600/5 border-green-500/20">
               <CardContent className="pt-4 pb-3">
                 <div className="flex items-center gap-2 text-green-600">
@@ -462,7 +502,7 @@ export function ThirdPartyStatementsTab() {
                 </div>
               </CardContent>
             </Card>
-            
+
             <Card className="bg-gradient-to-br from-orange-500/10 to-orange-600/5 border-orange-500/20">
               <CardContent className="pt-4 pb-3">
                 <div className="flex items-center gap-2 text-orange-600">
@@ -474,11 +514,11 @@ export function ThirdPartyStatementsTab() {
                 </div>
               </CardContent>
             </Card>
-            
+
             <Card className={cn(
               "bg-gradient-to-br border",
-              netBalance > 0 
-                ? "from-green-500/10 to-green-600/5 border-green-500/20" 
+              netBalance > 0
+                ? "from-green-500/10 to-green-600/5 border-green-500/20"
                 : netBalance < 0
                   ? "from-red-500/10 to-red-600/5 border-red-500/20"
                   : "from-gray-500/10 to-gray-600/5 border-gray-500/20"
@@ -546,7 +586,7 @@ export function ThirdPartyStatementsTab() {
                     {selectedOrders.length > 0 && (
                       <div className="mb-3 p-3 bg-muted/50 rounded-lg flex items-center justify-between">
                         <span className="text-sm">
-                          <strong>{selectedOrders.length}</strong> orders selected • 
+                          <strong>{selectedOrders.length}</strong> orders selected •
                           Expected: <strong className="text-green-600">${selectedTotals.expectedRemittance.toFixed(2)}</strong>
                         </span>
                         <Button variant="ghost" size="sm" onClick={() => setSelectedOrders([])}>
@@ -813,8 +853,8 @@ export function ThirdPartyStatementsTab() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setReceiveDialogOpen(false)}>Cancel</Button>
-            <Button 
-              onClick={() => recordRemittanceMutation.mutate()} 
+            <Button
+              onClick={() => recordRemittanceMutation.mutate()}
               disabled={recordRemittanceMutation.isPending}
               className="bg-green-600 hover:bg-green-700"
             >
@@ -860,8 +900,8 @@ export function ThirdPartyStatementsTab() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPayDialogOpen(false)}>Cancel</Button>
-            <Button 
-              onClick={() => payThirdPartyMutation.mutate()} 
+            <Button
+              onClick={() => payThirdPartyMutation.mutate()}
               disabled={payThirdPartyMutation.isPending}
               className="bg-orange-600 hover:bg-orange-700"
             >
@@ -902,9 +942,9 @@ export function ThirdPartyStatementsTab() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
-            <Button 
+            <Button
               variant="destructive"
-              onClick={() => deleteTransactionMutation.mutate(transactionToDelete)} 
+              onClick={() => deleteTransactionMutation.mutate(transactionToDelete)}
               disabled={deleteTransactionMutation.isPending}
             >
               {deleteTransactionMutation.isPending ? 'Deleting...' : 'Delete & Reverse'}

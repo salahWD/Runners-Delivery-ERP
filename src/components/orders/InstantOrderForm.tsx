@@ -582,6 +582,18 @@ export function InstantOrderForm() {
         if (cashboxError) {
           throw new Error('Failed to update cashbox: ' + cashboxError.message);
         }
+        const { error: cashboxTransactionError } = await (supabase.rpc as any)('add_cashbox_transaction', {
+          transaction_type: "OUT",
+          amount_usd: validatedData.order_amount_usd.toString(),
+          amount_lbp: validatedData.order_amount_lbp.toString(),
+          note: validatedData.notes || `Payment for order ${order_id} - (paid by company)`,
+          order_ref: order_id,
+          driver_id: validatedData.driver_id || null,
+          client_id: validatedData.client_id,
+          third_party_id: null,
+        });
+
+        if (cashboxTransactionError) throw cashboxTransactionError;
       }
 
       const { error } = await supabase.from("orders").insert(orderData);
