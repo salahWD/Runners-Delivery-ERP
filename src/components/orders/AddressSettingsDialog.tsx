@@ -20,17 +20,18 @@ export const AddressSettingsDialog = ({ open, onOpenChange }: AddressSettingsDia
   const [newArea, setNewArea] = useState("");
 
   const { data: areas } = useQuery({
-    queryKey: ["address-areas"],
+    queryKey: ["address-areas", "full-list"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("address_areas")
         .select("*")
         .order("name");
       if (error) throw error;
-      console.log(data)
+      console.log("data: ", data)
       return data;
     },
   });
+  console.log("areas: ", areas)
 
   const addAreaMutation = useMutation({
     mutationFn: async (name: string) => {
@@ -40,7 +41,7 @@ export const AddressSettingsDialog = ({ open, onOpenChange }: AddressSettingsDia
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["address-areas"] });
+      queryClient.invalidateQueries({ queryKey: ["address-areas", "full-list"] });
       toast({
         title: "Success",
         description: "Address area added successfully.",
@@ -65,7 +66,7 @@ export const AddressSettingsDialog = ({ open, onOpenChange }: AddressSettingsDia
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["address-areas"] });
+      queryClient.invalidateQueries({ queryKey: ["address-areas", "full-list"] });
       toast({
         title: "Success",
         description: "Address area deleted successfully.",
@@ -121,7 +122,7 @@ export const AddressSettingsDialog = ({ open, onOpenChange }: AddressSettingsDia
             <TableBody>
               {areas?.map((area, index) => (
                 <TableRow key={index}>
-                  <TableCell>{area.name}</TableCell>
+                  <TableCell>{area.name || "-"}</TableCell>
                   <TableCell>
                     <Button
                       variant="ghost"
