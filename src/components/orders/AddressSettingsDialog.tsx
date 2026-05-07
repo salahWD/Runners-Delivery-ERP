@@ -27,6 +27,7 @@ export const AddressSettingsDialog = ({ open, onOpenChange }: AddressSettingsDia
         .select("*")
         .order("name");
       if (error) throw error;
+      console.log(data)
       return data;
     },
   });
