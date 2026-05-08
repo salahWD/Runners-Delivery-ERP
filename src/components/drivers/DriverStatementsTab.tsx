@@ -24,7 +24,7 @@ import { cn } from '@/lib/utils';
 export function DriverStatementsTab() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [selectedDriver, setSelectedDriver] = useState('');
+  const [selectedDriver, setSelectedDriver] = useState(null);
   const [driverSearchOpen, setDriverSearchOpen] = useState(false);
   const [dateFrom, setDateFrom] = useState(() => {
     const d = new Date();
@@ -38,6 +38,8 @@ export function DriverStatementsTab() {
   const [selectedStatement, setSelectedStatement] = useState<any>(null);
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [paymentNotes, setPaymentNotes] = useState('');
+  const [amountUsd, setAmountUsd] = useState(0);
+  const [amountLbp, setAmountLbp] = useState(0);
   const [pendingExpanded, setPendingExpanded] = useState(true);
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
   const [previewStatement, setPreviewStatement] = useState<any>(null);
@@ -280,11 +282,13 @@ export function DriverStatementsTab() {
             }).in('id', orderIds);
 
 
-            const totals = calculateTotals(orders);
+            // const totals = calculateTotals(orders);
             // Net due FROM driver = what driver collected MINUS what we owe driver (refunds)
             // If negative, we owe the driver money (cash out from cashbox)
-            const netDueUsd = totals.totalCollectedUsd - totals.totalDriverPaidUsd;
-            const netDueLbp = totals.totalCollectedLbp - totals.totalDriverPaidLbp;
+            // const netDueUsd = totals.totalCollectedUsd - totals.totalDriverPaidUsd;
+            // const netDueLbp = totals.totalCollectedLbp - totals.totalDriverPaidLbp;
+            const netDueUsd = amountUsd;
+            const netDueLbp = amountLbp;
 
             // Use atomic cashbox update
             // If netDue is positive: driver owes us money (cash in)
@@ -306,28 +310,30 @@ export function DriverStatementsTab() {
             if (cashboxError) {
               console.log(cashboxError);
               throw cashboxError;
-            } else {
-              console.log("cashbox ", {
-                p_date: today,
-                p_cash_in_usd: cashInUsd,
-                p_cash_in_lbp: cashInLbp,
-                p_cash_out_usd: cashOutUsd,
-                p_cash_out_lbp: cashOutLbp,
-              })
-            };
+            }
 
             const { error: cashboxTransactionError } = await (supabase.rpc as any)('add_cashbox_transaction', {
               transaction_type: (cashInUsd - cashOutUsd) + (cashInLbp - cashOutLbp) > 0 ? "IN" : "OUT",
               amount_usd: (cashInUsd - cashOutUsd).toString(),
               amount_lbp: (cashInLbp - cashOutLbp).toString(),
-              note: `Statement ${selectedStatement.statement_id} issued for driver ${drivers?.find(d => d.id === selectedDriver)?.name || selectedDriver}. Net due: $${netDueUsd.toFixed(2)} and ${netDueLbp.toLocaleString()} LL. Orders: ${selectedStatement.order_refs.join(', ')}.`,
+              note: `Statement ${selectedStatement.statement_id} issued for driver ${drivers?.find(d => d.id === (selectedDriver || selectedStatement.driver_id))?.name || selectedDriver || selectedStatement.driver_id}. Net due: $${netDueUsd.toFixed(2)} and ${netDueLbp.toLocaleString()} LL. Orders: ${selectedStatement.order_refs.join(', ')}.`,
               order_ref: selectedStatement.statement_id,
-              driver_id: selectedDriver,
+              driver_id: selectedDriver || selectedStatement.driver_id,
               client_id: null,
               third_party_id: null,
             });
 
             if (cashboxTransactionError) {
+              console.log('add_cashbox_transaction', {
+                transaction_type: (cashInUsd - cashOutUsd) + (cashInLbp - cashOutLbp) > 0 ? "IN" : "OUT",
+                amount_usd: (cashInUsd - cashOutUsd).toString(),
+                amount_lbp: (cashInLbp - cashOutLbp).toString(),
+                note: `Statement ${selectedStatement.statement_id} issued for driver ${drivers?.find(d => d.id === (selectedDriver || selectedStatement.driver_id))?.name || selectedDriver || selectedStatement.driver_id}. Net due: $${netDueUsd.toFixed(2)} and ${netDueLbp.toLocaleString()} LL. Orders: ${selectedStatement.order_refs.join(', ')}.`,
+                order_ref: selectedStatement.statement_id,
+                driver_id: selectedDriver || selectedStatement.driver_id,
+                client_id: null,
+                third_party_id: null,
+              })
               console.log(cashboxTransactionError);
               throw cashboxTransactionError;
             } else {
@@ -336,7 +342,7 @@ export function DriverStatementsTab() {
             // Use atomic wallet update
             // This zeros out the driver's wallet by subtracting what we collected and adding back refunds
             const { error: walletError } = await (supabase.rpc as any)('update_driver_wallet_atomic', {
-              p_driver_id: selectedDriver,
+              p_driver_id: selectedDriver || selectedStatement.driver_id,
               p_amount_usd: -netDueUsd,
               p_amount_lbp: -netDueLbp,
             });
@@ -350,23 +356,23 @@ export function DriverStatementsTab() {
 
             // Create transaction record(s)
 
-            console.log("totals :", totals);
-            if (totals.totalCollectedUsd > 0 || totals.totalCollectedLbp > 0) {
+            // console.log("totals :", totals);
+            if (netDueUsd > 0 || netDueLbp > 0) {
               await supabase.from('driver_transactions').insert({
-                driver_id: selectedDriver,
+                driver_id: selectedDriver || selectedStatement.driver_id,
                 type: 'Debit',
-                amount_usd: totals.totalCollectedUsd,
-                amount_lbp: totals.totalCollectedLbp,
+                amount_usd: netDueUsd,
+                amount_lbp: netDueLbp,
                 note: `Statement ${selectedStatement.id} - Cash Collected`,
               });
             }
 
-            if (totals.totalDriverPaidUsd > 0 || totals.totalDriverPaidLbp > 0) {
+            if (netDueUsd < 0 || netDueLbp < 0) {
               await supabase.from('driver_transactions').insert({
-                driver_id: selectedDriver,
+                driver_id: selectedDriver || selectedStatement.driver_id,
                 type: 'Credit',
-                amount_usd: totals.totalDriverPaidUsd,
-                amount_lbp: totals.totalDriverPaidLbp,
+                amount_usd: Math.abs(netDueUsd),
+                amount_lbp: Math.abs(netDueLbp),
                 note: `Statement ${selectedStatement.id} - Refund for amounts paid`,
               });
             }
@@ -731,6 +737,8 @@ export function DriverStatementsTab() {
                                 className="h-7 text-xs"
                                 onClick={() => {
                                   setSelectedStatement(statement);
+                                  setAmountUsd(statement.net_due_usd);
+                                  setAmountLbp(statement.net_due_lbp);
                                   setPaymentDialogOpen(true);
                                 }}
                               >
@@ -793,6 +801,29 @@ export function DriverStatementsTab() {
             <div className="space-y-2">
               <Label className="text-sm">Notes (Optional)</Label>
               <Input value={paymentNotes} onChange={(e) => setPaymentNotes(e.target.value)} placeholder="Add notes..." />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="amount-usd">Amount USD</Label>
+                <Input
+                  id="amount-usd"
+                  type="number"
+                  step="0.01"
+                  value={amountUsd}
+                  onChange={(e) => setAmountUsd(Number(e.target.value))}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="amount-lbp">Amount LBP</Label>
+                <Input
+                  id="amount-lbp"
+                  type="number"
+                  step="1000"
+                  value={amountLbp}
+                  onChange={(e) => setAmountLbp(Number(e.target.value))}
+                />
+              </div>
             </div>
           </div>
           <DialogFooter>

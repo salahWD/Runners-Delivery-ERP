@@ -27,11 +27,9 @@ export const AddressSettingsDialog = ({ open, onOpenChange }: AddressSettingsDia
         .select("*")
         .order("name");
       if (error) throw error;
-      console.log("data: ", data)
       return data;
     },
   });
-  console.log("areas: ", areas)
 
   const addAreaMutation = useMutation({
     mutationFn: async (name: string) => {
@@ -111,9 +109,9 @@ export const AddressSettingsDialog = ({ open, onOpenChange }: AddressSettingsDia
           </Button>
         </form>
 
-        <div className="border rounded-lg">
+        <div className="border rounded-lg max-h-[400px] overflow-y-auto relative">
           <Table>
-            <TableHeader>
+            <TableHeader className="sticky top-0 bg-background z-10 shadow-sm">
               <TableRow>
                 <TableHead>Area Name</TableHead>
                 <TableHead className="w-[100px]">Actions</TableHead>

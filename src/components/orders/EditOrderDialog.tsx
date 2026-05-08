@@ -37,7 +37,9 @@ interface Order {
   delivery_fee_usd: number;
   delivery_fee_lbp: number;
   amount_due_to_client_usd?: number;
+  amount_due_to_client_lbp?: number;
   third_party_fee_usd?: number;
+  third_party_fee_lbp?: number;
   client_net_usd?: number;
   prepaid_by_runners?: boolean;
   prepaid_by_company?: boolean;
@@ -99,7 +101,9 @@ export default function EditOrderDialog({ order, open, onOpenChange }: EditOrder
     order_amount_lbp: order.order_amount_lbp.toString(),
     delivery_fee_lbp: order.delivery_fee_lbp.toString(),
     amount_due_to_client_usd: order.amount_due_to_client_usd?.toString() || "0",
+    amount_due_to_client_lbp: order.amount_due_to_client_lbp?.toString() || "0",
     third_party_fee_usd: (order as any).third_party_fee_usd?.toString() || "0",
+    third_party_fee_lbp: (order as any).third_party_fee_lbp?.toString() || "0",
     notes: order.notes || "",
     status: order.status as statusTypes,
     driver_id: order.driver_id || "",
@@ -504,8 +508,58 @@ export default function EditOrderDialog({ order, open, onOpenChange }: EditOrder
                         <Label>Due to Client (USD)</Label>
                         <Input
                           type="number"
-                          step="0.01"
+                          step="1000"
                           value={formData.amount_due_to_client_usd}
+                          readOnly
+                          className="bg-muted"
+                          title="Auto-calculated: Total - Delivery Fee"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="space-y-2">
+                        <Label>Total with Delivery (LBP)</Label>
+                        <Input
+                          type="number"
+                          step="1000"
+                          value={(parseFloat(formData.order_amount_lbp || "0") + parseFloat(formData.delivery_fee_lbp || "0"))}
+                          onChange={(e) => {
+                            const total = parseFloat(e.target.value) || 0;
+                            const deliveryFee = parseFloat(formData.delivery_fee_lbp) || 0;
+                            const orderAmount = total - deliveryFee;
+                            setFormData({
+                              ...formData,
+                              order_amount_lbp: orderAmount.toString(),
+                              amount_due_to_client_lbp: orderAmount.toString()
+                            });
+                          }}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Delivery Fee (LBP)</Label>
+                        <Input
+                          type="number"
+                          step="1000"
+                          value={formData.delivery_fee_lbp}
+                          onChange={(e) => {
+                            const deliveryFee = parseFloat(e.target.value) || 0;
+                            const total = parseFloat(formData.order_amount_lbp || "0") + parseFloat(formData.delivery_fee_lbp || "0");
+                            const orderAmount = total - deliveryFee;
+                            setFormData({
+                              ...formData,
+                              delivery_fee_lbp: e.target.value,
+                              order_amount_lbp: orderAmount.toString(),
+                              amount_due_to_client_lbp: orderAmount.toString()
+                            });
+                          }}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Due to Client (LBP)</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={formData.amount_due_to_client_lbp}
                           readOnly
                           className="bg-muted"
                           title="Auto-calculated: Total - Delivery Fee"

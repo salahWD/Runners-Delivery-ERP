@@ -454,7 +454,7 @@ export function EcomOrderForm() {
         client_net_usd: clientNetUsd,
         client_fee_rule: /* client.client_rules?.[0]?.fee_rule || */ "ADD_ON",
         prepaid_by_runners: rowData.prepaid_by_company,
-        prepaid_by_company: false,
+        prepaid_by_company: rowData.prepaid_by_company,
         prepay_amount_usd: rowData.prepaid_by_company ? orderAmount : 0,
         status: "New",
         address: rowData.customer_address || "",
@@ -492,6 +492,18 @@ export function EcomOrderForm() {
         });
 
         if (cashboxTransactionError) throw cashboxTransactionError;
+
+        const netUsd = orderAmount - deliveryFee;
+        // const netLbp = Number(order.order_amount_lbp) - Number(order.delivery_fee_lbp);
+
+        await supabase.from('accounting_entries').insert({
+          category: 'PrepaidFloat',
+          amount_usd: netUsd,
+          // amount_lbp: netLbp,
+          amount_lbp: 0,
+          order_ref: rowData.voucher_no || order_id,
+          memo: `Prepaid to ${client.name} for order ${rowData.voucher_no || order_id}`,
+        });
 
         const { error: clientError } = await supabase.from('client_transactions').insert({
           client_id: rowData.client_id,

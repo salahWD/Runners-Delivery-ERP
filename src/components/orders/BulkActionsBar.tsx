@@ -168,7 +168,7 @@ export function BulkActionsBar({ selectedIds, onClearSelection }: BulkActionsBar
       // First update the status
       const updateData: any = { status };
       // if (status === 'Delivered') {
-      if (['Delivered', 'DriverCollected'].includes(status)) {
+      if (['cancelled', 'Delivered', 'DriverCollected'].includes(status)) {
         updateData.delivered_at = new Date().toISOString();
       }
 
@@ -216,20 +216,73 @@ export function BulkActionsBar({ selectedIds, onClearSelection }: BulkActionsBar
             }
           }
 
-          if (order.status != status) {
-            await supabase.from('order_timeline_events').insert({
-              order_id: order.id,
-              type: status === 'Assigned'
-                ? 'ASSIGNED'
-                : status === 'PickedUp'
-                  ? 'PICKED_UP'
-                  : status === 'DriverCollected'
-                    ? 'DELIVERED'
-                    : 'ORDER_CREATED', // fallback if needed
-              title: `Status changed to ${status}`,
-              description: `Order moved from ${order.status} to ${status}`,
+        }
+      }
+
+      if (status == "cancelled") {
+        for (const orderId of selectedIds) {
+
+          if (orders.length > 0) {
+
+            const order = orders.find(o => o.id === orderId);
+
+            // Update cashbox atomically - expenses are cash out
+            const { error: cashboxError } = await (supabase.rpc as any)('update_cashbox_atomic', {
+              p_date: new Date().toISOString(),
+              p_cash_in_usd: order.order_amount_usd,
+              p_cash_in_lbp: order.order_amount_lbp,
+              p_cash_out_usd: 0,
+              p_cash_out_lbp: 0,
             });
+
+            if (cashboxError) {
+              console.error('Error Updating Cashbox:', cashboxError);
+              throw new Error('Order updated but accounting failed: ' + cashboxError.message);
+            }
+
+            const { error: cashboxTransactionError } = await (supabase.rpc as any)('add_cashbox_transaction', {
+              transaction_type: "IN",
+              amount_usd: order.order_amount_usd.toString(),
+              amount_lbp: order.order_amount_lbp.toString(),
+              note: `cancelled Order - Client: ${order.client_name || ''}`,
+              order_ref: order.voucher_no || order.order_id,
+              driver_id: order.driver_id || null,
+              client_id: order.client_id || null,
+              third_party_id: order.third_party_id || null,
+            });
+
+            if (cashboxTransactionError) throw cashboxTransactionError;
+
+            await supabase.from('client_transactions').insert({
+              client_id: order.client_id,
+              type: 'Debit',
+              amount_usd: order.order_amount_usd,
+              amount_lbp: order.order_amount_lbp,
+              note: `Cancelled order: ${order.id}`,
+            });
+
+
           }
+
+        }
+      }
+
+      for (const order of orders) {
+        if (order.status != status) {
+          await supabase.from('order_timeline_events').insert({
+            order_id: order.id,
+            type: status === 'Assigned'
+              ? 'ASSIGNED'
+              : status === 'PickedUp'
+                ? 'PICKED_UP'
+                : status === 'DriverCollected'
+                  ? 'DELIVERED'
+                  : status == 'CANCELLED'
+                    ? 'CANCELLED'
+                    : 'ORDER_CREATED', // fallback if needed
+            title: `Status changed to ${status}`,
+            description: `Order moved from ${order.status} to ${status}`,
+          });
         }
       }
     },
