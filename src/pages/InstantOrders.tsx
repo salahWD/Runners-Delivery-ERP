@@ -47,12 +47,12 @@ interface Order {
 
 // Helper function to determine payment status
 const getPaymentStatus = (order: Order) => {
-  const hasOrderAmount = (order.order_amount_usd > 0 || order.order_amount_lbp > 0);
+  // const hasOrderAmount = (order.order_amount_usd > 0 || order.order_amount_lbp > 0);
 
   // No order amount means nothing to collect - mark as Paid
-  if (!hasOrderAmount) {
-    return { label: "Paid", variant: "default" as const, className: "bg-green-600" };
-  }
+  // if (!hasOrderAmount) {
+  //   return { label: "Paid", variant: "default" as const, className: "bg-green-600" };
+  // }
 
   // Driver paid for client - client owes us
   if (order.driver_paid_for_client) {

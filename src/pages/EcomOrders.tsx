@@ -275,8 +275,9 @@ const EcomOrders = () => {
                   <TableHead>Customer Name</TableHead>
                   <TableHead>Phone</TableHead>
                   <TableHead>Address</TableHead>
-                  <TableHead>Total USD</TableHead>
-                  <TableHead>Total LBP</TableHead>
+                  <TableHead>Total</TableHead>
+                  <TableHead>Fee</TableHead>
+                  <TableHead>Due</TableHead>
                   <TableHead>Payment Type</TableHead>
                   <TableHead>Delivery</TableHead>
                   <TableHead>Status</TableHead>
@@ -304,7 +305,7 @@ const EcomOrders = () => {
                     <TableCell>{order.customers?.phone || "-"}</TableCell>
                     <TableCell className="max-w-[200px] truncate">{order.address}</TableCell>
                     <TableCell>${(Number(order.order_amount_usd) + Number(order.delivery_fee_usd)).toFixed(2)}</TableCell>
-                    <TableCell>{(Number(order.order_amount_lbp) + Number(order.delivery_fee_lbp)).toLocaleString()} LL</TableCell>
+                    <TableCell>$${Number(order.delivery_fee_usd).toFixed(2)}</TableCell>
                     <TableCell>
                       {order.prepaid_by_company ? (
                         // Cash-based order that was prepaid
