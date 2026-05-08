@@ -317,18 +317,18 @@ export function ClientStatementsTab() {
       // we add a credit transaction when we make a statment so that the balance of the client can change to accept payments
       // if credited => should take money
       // if debited => should pay money
-      if (totals.totalDueToClientUsd > 0 || totals.totalDueToClientLbp > 0) {
-        const { error: insertTransactionError } = await supabase.from('client_transactions').insert({
-          client_id: selectedClient,
-          type: 'Credit',
-          amount_usd: totals.totalDueToClientUsd,
-          amount_lbp: totals.totalDueToClientLbp,
-          note:
-            `We owe Client the statement amount- ${statementIdData}`,
-        });
+      // if (totals.totalDueToClientUsd > 0 || totals.totalDueToClientLbp > 0) {
+      //   const { error: insertTransactionError } = await supabase.from('client_transactions').insert({
+      //     client_id: selectedClient,
+      //     type: 'Credit',
+      //     amount_usd: totals.totalDueToClientUsd,
+      //     amount_lbp: totals.totalDueToClientLbp,
+      //     note:
+      //       `We owe Client the statement amount- ${statementIdData}`,
+      //   });
 
-        if (insertTransactionError) throw insertTransactionError;
-      }
+      //   if (insertTransactionError) throw insertTransactionError;
+      // }
       return statementIdData;
     },
     onSuccess: (statementId) => {
@@ -694,7 +694,7 @@ export function ClientStatementsTab() {
                                 variant="outline"
                                 className={tx.type === 'Credit' ? 'text-status-success border-status-success' : 'text-status-error border-status-error'}
                               >
-                                {tx.type === 'Credit' ? 'Client Paid' : 'Client Owes'}
+                                {tx.type === 'Credit' ? 'Credit' : 'Debit'}
                               </Badge>
                             </TableCell>
                             <TableCell className="py-1.5 text-muted-foreground max-w-[200px] truncate">
