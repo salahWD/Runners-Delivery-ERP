@@ -15,6 +15,8 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { FileText, Download, CheckCircle, Search, DollarSign, ChevronDown, ChevronUp, Wallet, Clock, TrendingUp, Eye, ChevronsUpDown, Check } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import * as XLSX from 'xlsx';
+import { jsPDF } from 'jspdf';
 import { useAuth } from '@/hooks/useAuth';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { DriverStatementPreview } from './DriverStatementPreview';
@@ -165,6 +167,8 @@ export function DriverStatementsTab() {
           ...acc,
           totalDriverPaidUsd: acc.totalDriverPaidUsd + Number(order.driver_paid_amount_usd || 0),
           totalDriverPaidLbp: acc.totalDriverPaidLbp + Number(order.driver_paid_amount_lbp || 0),
+          totalDeliveryFeesUsd: acc.totalDeliveryFeesUsd + Number(order.delivery_fee_usd || 0),
+          totalDeliveryFeesLbp: acc.totalDeliveryFeesLbp + Number(order.delivery_fee_lbp || 0),
         };
       } else {
         // Normal orders: driver collected from customer (use actual collected_amount from DB)
@@ -173,6 +177,8 @@ export function DriverStatementsTab() {
           ...acc,
           totalCollectedUsd: acc.totalCollectedUsd + Number(order.collected_amount_usd || 0),
           totalCollectedLbp: acc.totalCollectedLbp + Number(order.collected_amount_lbp || 0),
+          totalDeliveryFeesUsd: acc.totalDeliveryFeesUsd + Number(order.delivery_fee_usd || 0),
+          totalDeliveryFeesLbp: acc.totalDeliveryFeesLbp + Number(order.delivery_fee_lbp || 0),
         };
       }
     }, {
@@ -180,6 +186,8 @@ export function DriverStatementsTab() {
       totalCollectedLbp: 0,
       totalDriverPaidUsd: 0,
       totalDriverPaidLbp: 0,
+      totalDeliveryFeesUsd: 0,
+      totalDeliveryFeesLbp: 0,
     });
   };
 
@@ -189,6 +197,133 @@ export function DriverStatementsTab() {
   // If negative, we owe the driver money (cash out from cashbox)
   const netDueUsd = totals.totalCollectedUsd - totals.totalDriverPaidUsd;
   const netDueLbp = totals.totalCollectedLbp - totals.totalDriverPaidLbp;
+
+  const statementPeriodLabel = `${format(new Date(dateFrom), 'MMM dd, yyyy')} - ${format(new Date(dateTo), 'MMM dd, yyyy')}`;
+
+  const formatDualAmount = (usd: number, lbp: number) => {
+    const parts = [];
+    if (usd !== 0) parts.push(`$${usd.toFixed(2)}`);
+    if (lbp !== 0) parts.push(`${lbp.toLocaleString()} LL`);
+    return parts.length > 0 ? parts.join(' / ') : '-';
+  };
+
+  const exportIssueStatementAsExcel = () => {
+    const workbook = XLSX.utils.book_new();
+    const rows: Array<Array<string>> = [
+      ['RUNNERS ERP DRIVER STATEMENT'],
+      ['Driver', selectedDriverData?.name || 'Driver'],
+      ['Period', statementPeriodLabel],
+      [],
+      ['Date', 'Order', 'Client', 'Collected', 'Fee', 'Driver Paid'],
+    ];
+
+    selectedOrdersData.forEach((order) => {
+      rows.push([
+        order.delivered_at ? format(new Date(order.delivered_at), 'MMM dd, yyyy') : '-',
+        order.order_id,
+        order.clients?.name || '-',
+        formatDualAmount(Number(order.collected_amount_usd || 0), Number(order.collected_amount_lbp || 0)),
+        formatDualAmount(Number(order.delivery_fee_usd || 0), Number(order.delivery_fee_lbp || 0)),
+        order.driver_paid_for_client
+          ? formatDualAmount(Number(order.driver_paid_amount_usd || 0), Number(order.driver_paid_amount_lbp || 0))
+          : '-',
+      ]);
+    });
+
+    rows.push([], ['SUMMARY']);
+    rows.push(['Total Collected', formatDualAmount(totals.totalCollectedUsd, totals.totalCollectedLbp)]);
+    rows.push(['Total Delivery Fees', formatDualAmount(totals.totalDeliveryFeesUsd, totals.totalDeliveryFeesLbp)]);
+    rows.push(['Total Driver Paid Refund', formatDualAmount(totals.totalDriverPaidUsd, totals.totalDriverPaidLbp)]);
+    rows.push(['Net Due', formatDualAmount(netDueUsd, netDueLbp)]);
+
+    const worksheet = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Driver Statement');
+    const fileName = `DriverStatement-${selectedDriverData?.name?.replace(/[^a-zA-Z0-9]/g, '_') || 'Driver'}-${format(new Date(), 'yyyyMMdd')}.xlsx`;
+    XLSX.writeFile(workbook, fileName);
+    toast.success('Statement exported as Excel');
+  };
+
+  const exportIssueStatementAsPdf = () => {
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const margin = 40;
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const lineHeight = 18;
+    let y = margin;
+
+    const addWrappedText = (text: string, indent = 0, options: { bold?: boolean } = {}) => {
+      if (y > 760) {
+        doc.addPage();
+        y = margin;
+      }
+      if (options.bold) {
+        doc.setFont(undefined, 'bold');
+      } else {
+        doc.setFont(undefined, 'normal');
+      }
+      const lines = doc.splitTextToSize(text, pageWidth - margin * 2 - indent);
+      lines.forEach((line) => {
+        doc.text(line, margin + indent, y);
+        y += lineHeight;
+      });
+    };
+
+    const addSectionHeader = (title: string) => {
+      if (y > 700) {
+        doc.addPage();
+        y = margin;
+      }
+      doc.setFont(undefined, 'bold');
+      doc.setFontSize(12);
+      doc.text(title, margin, y);
+      y += lineHeight;
+      doc.setFontSize(10);
+    };
+
+    doc.setFillColor('#1d4ed8');
+    doc.rect(margin, y, 120, 40, 'F');
+    doc.setTextColor('#ffffff');
+    doc.setFontSize(14);
+    doc.text('RUNNERS', margin + 10, y + 18);
+    doc.setFontSize(10);
+    doc.text('ERP', margin + 10, y + 34);
+
+    doc.setTextColor('#111827');
+    doc.setFontSize(20);
+    doc.text('Driver Statement', margin + 150, y + 22);
+    doc.setFontSize(10);
+    doc.text(`Driver: ${selectedDriverData?.name || 'Driver'}`, margin + 150, y + 40);
+    doc.text(`Period: ${statementPeriodLabel}`, margin + 150, y + 56);
+
+    y += 80;
+    addSectionHeader(`Orders (${selectedOrdersData.length})`);
+
+    selectedOrdersData.forEach((order, index) => {
+      addWrappedText(`${index + 1}. ${order.order_id}`, 0, { bold: true });
+      addWrappedText(`Date: ${order.delivered_at ? format(new Date(order.delivered_at), 'MMM dd, yyyy') : '-'}`, 10);
+      addWrappedText(`Client: ${order.clients?.name || '-'}`, 10);
+      addWrappedText(`Collected: ${formatDualAmount(Number(order.collected_amount_usd || 0), Number(order.collected_amount_lbp || 0))}`, 10);
+      addWrappedText(`Fee: ${formatDualAmount(Number(order.delivery_fee_usd || 0), Number(order.delivery_fee_lbp || 0))}`, 10);
+      if (order.driver_paid_for_client) {
+        addWrappedText(`Driver Paid: ${formatDualAmount(Number(order.driver_paid_amount_usd || 0), Number(order.driver_paid_amount_lbp || 0))}`, 10);
+      }
+      y += 4;
+    });
+
+    if (y > 700) {
+      doc.addPage();
+      y = margin;
+    }
+
+    addSectionHeader('Summary');
+    addWrappedText(`Total Collected: ${formatDualAmount(totals.totalCollectedUsd, totals.totalCollectedLbp)}`);
+    addWrappedText(`Delivery Fees: ${formatDualAmount(totals.totalDeliveryFeesUsd, totals.totalDeliveryFeesLbp)}`);
+    addWrappedText(`Driver Paid Refund: ${formatDualAmount(totals.totalDriverPaidUsd, totals.totalDriverPaidLbp)}`);
+    addWrappedText(`Net Due: ${formatDualAmount(netDueUsd, netDueLbp)}`);
+
+    const fileName = `DriverStatement-${selectedDriverData?.name?.replace(/[^a-zA-Z0-9]/g, '_') || 'Driver'}-${format(new Date(), 'yyyyMMdd')}.pdf`;
+    doc.save(fileName);
+    toast.success('Statement exported as PDF');
+  };
 
   const issueStatementMutation = useMutation({
     mutationFn: async () => {
@@ -1009,6 +1144,16 @@ export function DriverStatementsTab() {
               >
                 📋 Copy for WhatsApp
               </Button>
+              <div className="grid grid-cols-2 gap-2">
+                <Button variant="outline" onClick={exportIssueStatementAsExcel}>
+                  <Download className="mr-2 h-4 w-4" />
+                  Export Excel
+                </Button>
+                <Button variant="outline" onClick={exportIssueStatementAsPdf}>
+                  <Download className="mr-2 h-4 w-4" />
+                  Export PDF
+                </Button>
+              </div>
             </div>
 
             <DialogFooter>

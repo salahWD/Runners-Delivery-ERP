@@ -3,9 +3,11 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Copy, X } from 'lucide-react';
+import { Copy, Download, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import * as XLSX from 'xlsx';
+import { jsPDF } from 'jspdf';
 
 interface Order {
   id: string;
@@ -64,6 +66,138 @@ export function DriverStatementPreview({
     return parts.length > 0 ? parts.join(' / ') : '-';
   };
 
+  const statementPeriodLabel = `${format(new Date(dateFrom), 'MMM dd, yyyy')} - ${format(new Date(dateTo), 'MMM dd, yyyy')}`;
+
+  const exportStatementAsExcel = () => {
+    const workbook = XLSX.utils.book_new();
+    const rows: Array<Array<string>> = [
+      ['RUNNERS ERP DRIVER STATEMENT'],
+      ['Driver', driverName],
+      ['Period', statementPeriodLabel],
+      [],
+      ['Date', 'Order', 'Client', 'Collected', 'Fee', 'Driver Paid'],
+    ];
+
+    orders.forEach((order) => {
+      const collected = formatAmount(Number(order.collected_amount_usd || 0), Number(order.collected_amount_lbp || 0));
+      const fee = formatAmount(Number(order.delivery_fee_usd || 0), Number(order.delivery_fee_lbp || 0));
+      const driverPaid = order.driver_paid_for_client
+        ? formatAmount(Number(order.driver_paid_amount_usd || 0), Number(order.driver_paid_amount_lbp || 0))
+        : '-';
+      const orderRef = order.order_type === 'ecom' ? order.voucher_no || order.order_id : order.order_id;
+
+      rows.push([
+        order.delivered_at ? format(new Date(order.delivered_at), 'MMM dd, yyyy') : '-',
+        orderRef,
+        order.clients?.name || '-',
+        collected,
+        fee,
+        driverPaid,
+      ]);
+    });
+
+    rows.push([], ['SUMMARY']);
+    rows.push(['Total Collected', formatAmount(totals.totalCollectedUsd, totals.totalCollectedLbp)]);
+    rows.push(['Delivery Fees', formatAmount(totals.totalDeliveryFeesUsd, totals.totalDeliveryFeesLbp)]);
+    rows.push(['Driver Paid Refund', formatAmount(totals.totalDriverPaidUsd, totals.totalDriverPaidLbp)]);
+    rows.push(['Net Due', formatAmount(netDueUsd, netDueLbp)]);
+
+    const worksheet = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Driver Statement');
+    const fileName = `DriverStatement-${driverName.replace(/[^a-zA-Z0-9]/g, '_')}-${format(new Date(), 'yyyyMMdd')}.xlsx`;
+    XLSX.writeFile(workbook, fileName);
+    toast.success('Statement exported as Excel');
+  };
+
+  const exportStatementAsPdf = () => {
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const margin = 40;
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const lineHeight = 18;
+    let y = margin;
+
+    const addWrappedText = (text: string, indent = 0, options: { bold?: boolean } = {}) => {
+      if (y > 760) {
+        doc.addPage();
+        y = margin;
+      }
+      if (options.bold) {
+        doc.setFont(undefined, 'bold');
+      } else {
+        doc.setFont(undefined, 'normal');
+      }
+      const lines = doc.splitTextToSize(text, pageWidth - margin * 2 - indent);
+      lines.forEach((line) => {
+        doc.text(line, margin + indent, y);
+        y += lineHeight;
+      });
+    };
+
+    const addSectionHeader = (title: string) => {
+      if (y > 700) {
+        doc.addPage();
+        y = margin;
+      }
+      doc.setFont(undefined, 'bold');
+      doc.setFontSize(12);
+      doc.text(title, margin, y);
+      y += lineHeight;
+      doc.setFontSize(10);
+    };
+
+    doc.setFillColor('#1d4ed8');
+    doc.rect(margin, y, 120, 40, 'F');
+    doc.setTextColor('#ffffff');
+    doc.setFontSize(14);
+    doc.text('RUNNERS', margin + 10, y + 18);
+    doc.setFontSize(10);
+    doc.text('ERP', margin + 10, y + 34);
+
+    doc.setTextColor('#111827');
+    doc.setFontSize(20);
+    doc.text('Driver Statement', margin + 150, y + 22);
+    doc.setFontSize(10);
+    doc.text(`Driver: ${driverName}`, margin + 150, y + 40);
+    doc.text(`Period: ${statementPeriodLabel}`, margin + 150, y + 56);
+
+    y += 80;
+
+    addSectionHeader(`Orders (${orders.length})`);
+    orders.forEach((order, index) => {
+      const collected = formatAmount(Number(order.collected_amount_usd || 0), Number(order.collected_amount_lbp || 0));
+      const fee = formatAmount(Number(order.delivery_fee_usd || 0), Number(order.delivery_fee_lbp || 0));
+      const driverPaid = order.driver_paid_for_client
+        ? formatAmount(Number(order.driver_paid_amount_usd || 0), Number(order.driver_paid_amount_lbp || 0))
+        : '-';
+      const orderRef = order.order_type === 'ecom' ? order.voucher_no || order.order_id : order.order_id;
+
+      addWrappedText(`${index + 1}. ${orderRef}`, 0, { bold: true });
+      addWrappedText(`Date: ${order.delivered_at ? format(new Date(order.delivered_at), 'MMM dd, yyyy') : '-'}`, 10);
+      addWrappedText(`Client: ${order.clients?.name || '-'}`, 10);
+      addWrappedText(`Collected: ${collected}`, 10);
+      addWrappedText(`Fee: ${fee}`, 10);
+      if (order.driver_paid_for_client) {
+        addWrappedText(`Driver Paid: ${driverPaid}`, 10);
+      }
+      y += 4;
+    });
+
+    if (y > 700) {
+      doc.addPage();
+      y = margin;
+    }
+
+    addSectionHeader('Summary');
+    addWrappedText(`Total Collected: ${formatAmount(totals.totalCollectedUsd, totals.totalCollectedLbp)}`);
+    addWrappedText(`Delivery Fees: ${formatAmount(totals.totalDeliveryFeesUsd, totals.totalDeliveryFeesLbp)}`);
+    addWrappedText(`Driver Paid Refund: ${formatAmount(totals.totalDriverPaidUsd, totals.totalDriverPaidLbp)}`);
+    addWrappedText(`Net Due: ${formatAmount(netDueUsd, netDueLbp)}`);
+
+    const fileName = `DriverStatement-${driverName.replace(/[^a-zA-Z0-9]/g, '_')}-${format(new Date(), 'yyyyMMdd')}.pdf`;
+    doc.save(fileName);
+    toast.success('Statement exported as PDF');
+  };
+
   const generateWhatsAppText = () => {
     let text = `📋 *DRIVER STATEMENT - ${driverName}*\n`;
     text += `📅 Period: ${format(new Date(dateFrom), 'MMM dd, yyyy')} - ${format(new Date(dateTo), 'MMM dd, yyyy')}\n`;
@@ -71,7 +205,7 @@ export function DriverStatementPreview({
 
     text += `*ORDERS (${orders.length})*\n`;
     text += `─────────────────────\n`;
-    
+
     orders.forEach((order, idx) => {
       const collectedUsd = Number(order.collected_amount_usd || 0);
       const collectedLbp = Number(order.collected_amount_lbp || 0);
@@ -79,9 +213,9 @@ export function DriverStatementPreview({
       const feeLbp = Number(order.delivery_fee_lbp || 0);
       const driverPaidUsd = Number(order.driver_paid_amount_usd || 0);
       const driverPaidLbp = Number(order.driver_paid_amount_lbp || 0);
-      
+
       const orderRef = order.order_type === 'ecom' ? (order.voucher_no || order.order_id) : order.order_id;
-      
+
       text += `\n${idx + 1}. *${orderRef}*\n`;
       text += `   📅 ${order.delivered_at ? format(new Date(order.delivered_at), 'MMM dd, yyyy') : 'N/A'}\n`;
       text += `   🏪 ${order.clients?.name || 'N/A'}\n`;
@@ -145,7 +279,7 @@ export function DriverStatementPreview({
                   const driverPaidUsd = Number(order.driver_paid_amount_usd || 0);
                   const driverPaidLbp = Number(order.driver_paid_amount_lbp || 0);
                   const orderRef = order.order_type === 'ecom' ? (order.voucher_no || order.order_id) : order.order_id;
-                  
+
                   return (
                     <TableRow key={order.id} className="text-sm">
                       <TableCell>{order.delivered_at ? format(new Date(order.delivered_at), 'MMM dd') : '-'}</TableCell>
@@ -204,6 +338,14 @@ export function DriverStatementPreview({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             <X className="mr-2 h-4 w-4" />
             Close
+          </Button>
+          <Button variant="outline" onClick={exportStatementAsExcel}>
+            <Download className="mr-2 h-4 w-4" />
+            Export Excel
+          </Button>
+          <Button variant="outline" onClick={exportStatementAsPdf}>
+            <Download className="mr-2 h-4 w-4" />
+            Export PDF
           </Button>
           <Button onClick={copyToClipboard}>
             <Copy className="mr-2 h-4 w-4" />

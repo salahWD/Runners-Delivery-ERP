@@ -180,30 +180,20 @@ export function BulkActionsBar({ selectedIds, onClearSelection }: BulkActionsBar
       if (['Delivered', 'DriverCollected'].includes(status)) {
         console.log(`Processing delivery accounting for ${selectedIds.length} orders...`);
 
-        // Process each order through the edge function
-        for (const orderId of selectedIds) {
+        await Promise.all(selectedIds.map(async (orderId) => {
           const { error: functionError } = await supabase.functions.invoke('process-order-delivery', {
             body: { orderId }
           });
 
           if (functionError) {
             console.error(`Error processing delivery for order ${orderId}:`, functionError);
-            // Continue processing other orders even if one fails
+            return;
           }
 
           const order = orders.find(o => o.id === orderId);
-          if (order.third_party_id) {
-          }
-          if (orders.length > 0 && !order.company_paid_for_order && !order.third_party_id /* && !order.prepaid_by_runners */) {
-            console.log(`Updating driver wallet for order ${order.id}...`);
-            console.log(order.driver_id);
-            console.log(order?.driver_paid_for_client);
-            console.log(order.driver_paid_amount_usd);
-            console.log({
-              p_driver_id: order.driver_id,
-              p_amount_usd: order?.driver_paid_for_client ? (order.driver_paid_amount_usd * -1) : order.order_amount_usd + order.delivery_fee_usd,
-              p_amount_lbp: order?.driver_paid_for_client ? (order.driver_paid_amount_lbp * -1) : order.order_amount_lbp + order.delivery_fee_lbp,
-            });
+          if (!order) return;
+
+          if (!order.company_paid_for_order && !order.third_party_id /* && !order.prepaid_by_runners */) {
             const { error: walletError } = await (supabase.rpc as any)('update_driver_wallet_atomic', {
               p_driver_id: order.driver_id,
               p_amount_usd: order?.driver_paid_for_client ? (order.driver_paid_amount_usd * -1) : order.order_amount_usd + order.delivery_fee_usd,
@@ -215,61 +205,53 @@ export function BulkActionsBar({ selectedIds, onClearSelection }: BulkActionsBar
               throw new Error('Order updated but accounting failed: ' + walletError.message);
             }
           }
-
-        }
+        }));
       }
 
       if (status == "cancelled") {
-        for (const orderId of selectedIds) {
+        await Promise.all(selectedIds.map(async (orderId) => {
+          const order = orders.find(o => o.id === orderId);
+          if (!order) return;
 
-          if (orders.length > 0) {
+          const { error: cashboxError } = await (supabase.rpc as any)('update_cashbox_atomic', {
+            p_date: new Date().toISOString(),
+            p_cash_in_usd: order.order_amount_usd,
+            p_cash_in_lbp: order.order_amount_lbp,
+            p_cash_out_usd: 0,
+            p_cash_out_lbp: 0,
+          });
 
-            const order = orders.find(o => o.id === orderId);
-
-            // Update cashbox atomically - expenses are cash out
-            const { error: cashboxError } = await (supabase.rpc as any)('update_cashbox_atomic', {
-              p_date: new Date().toISOString(),
-              p_cash_in_usd: order.order_amount_usd,
-              p_cash_in_lbp: order.order_amount_lbp,
-              p_cash_out_usd: 0,
-              p_cash_out_lbp: 0,
-            });
-
-            if (cashboxError) {
-              console.error('Error Updating Cashbox:', cashboxError);
-              throw new Error('Order updated but accounting failed: ' + cashboxError.message);
-            }
-
-            const { error: cashboxTransactionError } = await (supabase.rpc as any)('add_cashbox_transaction', {
-              transaction_type: "IN",
-              amount_usd: order.order_amount_usd.toString(),
-              amount_lbp: order.order_amount_lbp.toString(),
-              note: `cancelled Order - Client: ${order.client_name || ''}`,
-              order_ref: order.voucher_no || order.order_id,
-              driver_id: order.driver_id || null,
-              client_id: order.client_id || null,
-              third_party_id: order.third_party_id || null,
-            });
-
-            if (cashboxTransactionError) throw cashboxTransactionError;
-
-            await supabase.from('client_transactions').insert({
-              client_id: order.client_id,
-              type: 'Debit',
-              amount_usd: order.order_amount_usd,
-              amount_lbp: order.order_amount_lbp,
-              note: `Cancelled order: ${order.id}`,
-            });
-
-
+          if (cashboxError) {
+            console.error('Error Updating Cashbox:', cashboxError);
+            throw new Error('Order updated but accounting failed: ' + cashboxError.message);
           }
 
-        }
+          const { error: cashboxTransactionError } = await (supabase.rpc as any)('add_cashbox_transaction', {
+            transaction_type: "IN",
+            amount_usd: order.order_amount_usd.toString(),
+            amount_lbp: order.order_amount_lbp.toString(),
+            note: `cancelled Order - Client: ${order.client_name || ''}`,
+            order_ref: order.voucher_no || order.order_id,
+            driver_id: order.driver_id || null,
+            client_id: order.client_id || null,
+            third_party_id: order.third_party_id || null,
+          });
+
+          if (cashboxTransactionError) throw cashboxTransactionError;
+
+          await supabase.from('client_transactions').insert({
+            client_id: order.client_id,
+            type: 'Debit',
+            amount_usd: order.order_amount_usd,
+            amount_lbp: order.order_amount_lbp,
+            note: `Cancelled order: ${order.id}`,
+          });
+        }));
       }
 
-      for (const order of orders) {
+      await Promise.all(orders.map(async (order) => {
         if (order.status != status) {
-          await supabase.from('order_timeline_events').insert({
+          await (supabase.from('order_timeline_events' as any) as any).insert({
             order_id: order.id,
             type: status === 'Assigned'
               ? 'ASSIGNED'
@@ -284,7 +266,7 @@ export function BulkActionsBar({ selectedIds, onClearSelection }: BulkActionsBar
             description: `Order moved from ${order.status} to ${status}`,
           });
         }
-      }
+      }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["orders"] });

@@ -104,13 +104,13 @@ const EcomOrders = () => {
     if (!orders) return orders;
 
     return orders.filter((order) => {
-      const matchesSearch = !searchQuery.trim() || (
-        order.clients?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        order.voucher_no?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        order.customers?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        order.customers?.phone?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        order.address?.toLowerCase().includes(searchQuery.toLowerCase())
-      );
+      const query = searchQuery.toLowerCase();
+      const date = new Date(order.created_at).toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
 
       const matchesStatus = statusFilter === "all" || order.status === statusFilter;
       const matchesPayment = paymentFilter === "all" ||
@@ -130,8 +130,20 @@ const EcomOrders = () => {
       } else if (settlementFilter === "3p_received") {
         matchesSettlement = order.fulfillment === 'ThirdParty' && order.third_party_settlement_status === 'Received';
       } else if (settlementFilter === "pending_delivery") {
-        matchesSettlement = order.status !== 'Delivered' && order.status !== 'Cancelled' && order.status !== 'Returned';
+        matchesSettlement = order.status !== 'Delivered' && order.status !== 'DriverCollected' && order.status !== 'Cancelled' && order.status !== 'Returned';
       }
+
+      const matchesSearch = !searchQuery.trim() || (
+        order.clients?.name?.toLowerCase().includes(query) ||
+        order.voucher_no?.toLowerCase().includes(query) ||
+        (order.status == "Delivered" ? "DriverCollected" : order.status)?.toLowerCase().includes(query) ||
+        order.third_parties?.name?.toLowerCase().includes(query) ||
+        // order.status.includes(query) ||
+        order.customers?.name?.toLowerCase().includes(query) ||
+        order.customers?.phone?.toLowerCase().includes(query) ||
+        order.address?.toLowerCase().includes(query) ||
+        date?.toLowerCase().includes(query)
+      );
 
       return matchesSearch && matchesStatus && matchesPayment && matchesFulfillment && matchesSettlement;
     });
@@ -193,7 +205,7 @@ const EcomOrders = () => {
           </div>
         )}
 
-        <Card>
+        <Card className="!mb-20">
           <CardContent className="p-6">
             <div className="space-y-4">
               <div className="flex justify-between items-center">
@@ -305,7 +317,8 @@ const EcomOrders = () => {
                     <TableCell>{order.customers?.phone || "-"}</TableCell>
                     <TableCell className="max-w-[200px] truncate">{order.address}</TableCell>
                     <TableCell>${(Number(order.order_amount_usd) + Number(order.delivery_fee_usd)).toFixed(2)}</TableCell>
-                    <TableCell>$${Number(order.delivery_fee_usd).toFixed(2)}</TableCell>
+                    <TableCell>${Number(order.delivery_fee_usd).toFixed(2)}</TableCell>
+                    <TableCell>${Number(order.amount_due_to_client_usd).toFixed(2)}</TableCell>
                     <TableCell>
                       {order.prepaid_by_company ? (
                         // Cash-based order that was prepaid

@@ -6,6 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import { Copy, FileText, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import * as XLSX from 'xlsx';
+import { jsPDF } from 'jspdf';
 
 interface Order {
   id: string;
@@ -89,6 +91,173 @@ export function ClientStatementPreview({
     parts.push(`$${usd.toFixed(2)}`);
     parts.push(`${lbp.toLocaleString()} LL`);
     return parts.length > 0 ? parts.join(' / ') : '-';
+  };
+
+  const formatDateLabel = (dateString: string) => format(new Date(dateString), 'MMM dd, yyyy');
+  const statementPeriodLabel = `${formatDateLabel(dateFrom)} - ${formatDateLabel(dateTo)}`;
+
+  const exportStatementAsExcel = () => {
+    const workbook = XLSX.utils.book_new();
+    const rows: Array<Array<string | number>> = [
+      ['RUNNERS ERP STATEMENT'],
+      ['Client', clientName],
+      ['Period', statementPeriodLabel],
+      [],
+      ['Instant / Errand Orders'],
+      ['Date', 'Order ID', 'Address', 'Driver Paid', 'Notes', 'Amount', 'Fee', 'Due'],
+    ];
+
+    instantOrders.forEach((order) => {
+      const due = calculateDue(order);
+      rows.push([
+        formatDateLabel(order.created_at),
+        order.order_id,
+        order.address,
+        order.driver_paid_for_client ? 'Yes' : 'No',
+        order.notes || '-',
+        formatAmount(Number(order.order_amount_usd || 0), Number(order.order_amount_lbp || 0)),
+        order.driver_paid_for_client ? formatAmount(Number(order.delivery_fee_usd || 0), Number(order.delivery_fee_lbp || 0)) : '-',
+        formatAmount(due.usd, due.lbp),
+      ]);
+    });
+
+    if (ecomOrders.length > 0) {
+      rows.push([], ['E-Commerce Orders'], ['Voucher #', 'Customer', 'Phone', 'Address', 'Order', 'Fee', 'Due']);
+      ecomOrders.forEach((order) => {
+        const due = calculateDue(order);
+        rows.push([
+          order.voucher_no || order.order_id,
+          order.customers?.name || '-',
+          order.customers?.phone || '-',
+          order.address,
+          `$${Number(order.order_amount_usd + order.delivery_fee_usd).toFixed(2)}`,
+          `$${Number(order.delivery_fee_usd).toFixed(2)}`,
+          `$${due.usd.toFixed(2)}`,
+        ]);
+      });
+    }
+
+    rows.push([], ['SUMMARY']);
+    rows.push(['Total Orders', totals.totalOrders]);
+    rows.push(['Order Amount', formatAmount(totals.totalOrderAmountUsd, totals.totalOrderAmountLbp)]);
+    rows.push(['Delivery Fees', formatAmount(totals.totalDeliveryFeesUsd, totals.totalDeliveryFeesLbp)]);
+    rows.push(['Total Due', formatAmount(totals.totalDueToClientUsd, totals.totalDueToClientLbp)]);
+
+    const worksheet = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Statement');
+    const fileName = `Statement-${clientName.replace(/[^a-zA-Z0-9]/g, '_')}-${format(new Date(), 'yyyyMMdd')}.xlsx`;
+    XLSX.writeFile(workbook, fileName);
+    toast.success('Statement exported as Excel');
+  };
+
+  const exportStatementAsPdf = () => {
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const margin = 40;
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const lineHeight = 18;
+    let y = margin;
+
+    doc.setFillColor('#1d4ed8');
+    doc.rect(margin, y, 120, 40, 'F');
+    doc.setTextColor('#ffffff');
+    doc.setFontSize(14);
+    doc.text('RUNNERS', margin + 10, y + 18);
+    doc.setFontSize(10);
+    doc.text('ERP', margin + 10, y + 34);
+
+    doc.setTextColor('#111827');
+    doc.setFontSize(20);
+    doc.text('Statement', margin + 150, y + 22);
+    doc.setFontSize(10);
+    doc.text(`Client: ${clientName}`, margin + 150, y + 40);
+    doc.text(`Period: ${statementPeriodLabel}`, margin + 150, y + 56);
+
+    y += 80;
+
+    const addWrappedText = (text: string, indent = 0, options: { bold?: boolean } = {}) => {
+      if (y > 760) {
+        doc.addPage();
+        y = margin;
+      }
+      if (options.bold) {
+        doc.setFont(undefined, 'bold');
+      } else {
+        doc.setFont(undefined, 'normal');
+      }
+      const lines = doc.splitTextToSize(text, pageWidth - margin * 2 - indent);
+      lines.forEach((line) => {
+        doc.text(line, margin + indent, y);
+        y += lineHeight;
+      });
+    };
+
+    const addSectionHeader = (title: string) => {
+      if (y > 700) {
+        doc.addPage();
+        y = margin;
+      }
+      doc.setFont(undefined, 'bold');
+      doc.setFontSize(12);
+      doc.text(title, margin, y);
+      y += lineHeight;
+      doc.setFontSize(10);
+    };
+
+    if (instantOrders.length > 0) {
+      addSectionHeader(`Instant / Errand Orders (${instantOrders.length})`);
+      instantOrders.forEach((order, index) => {
+        const due = calculateDue(order);
+        addWrappedText(`${index + 1}. ${order.order_id} (${formatDateLabel(order.created_at)})`, 0, { bold: true });
+        addWrappedText(`Address: ${order.address}`, 10);
+        addWrappedText(`Amount: ${formatAmount(Number(order.order_amount_usd || 0), Number(order.order_amount_lbp || 0))}`, 10);
+        if (order.driver_paid_for_client) {
+          addWrappedText(`Driver Paid: Yes`, 10);
+          addWrappedText(`Fee: ${formatAmount(Number(order.delivery_fee_usd || 0), Number(order.delivery_fee_lbp || 0))}`, 10);
+        }
+        if (order.notes) {
+          addWrappedText(`Notes: ${order.notes}`, 10);
+        }
+        addWrappedText(`Due: ${formatAmount(due.usd, due.lbp)}`, 10);
+        y += 4;
+      });
+    }
+
+    if (ecomOrders.length > 0) {
+      addSectionHeader(`E-Commerce Orders (${ecomOrders.length})`);
+      ecomOrders.forEach((order, index) => {
+        const due = calculateDue(order);
+        addWrappedText(`${index + 1}. ${order.voucher_no || order.order_id}`, 0, { bold: true });
+        addWrappedText(`Customer: ${order.customers?.name || '-'}`, 10);
+        addWrappedText(`Phone: ${order.customers?.phone || '-'}`, 10);
+        addWrappedText(`Address: ${order.address}`, 10);
+        addWrappedText(`Order: $${Number(order.order_amount_usd + order.delivery_fee_usd).toFixed(2)}`, 10);
+        addWrappedText(`Fee: $${Number(order.delivery_fee_usd).toFixed(2)}`, 10);
+        addWrappedText(`Due: $${due.usd.toFixed(2)}`, 10);
+        y += 4;
+      });
+    }
+
+    if (y > 700) {
+      doc.addPage();
+      y = margin;
+    }
+
+    doc.setDrawColor('#d1d5db');
+    doc.setLineWidth(0.5);
+    doc.line(margin, y, pageWidth - margin, y);
+    y += lineHeight;
+
+    doc.setFont(undefined, 'bold');
+    doc.text('Summary', margin, y);
+    y += lineHeight;
+    doc.setFont(undefined, 'normal');
+    addWrappedText(`Total Orders: ${totals.totalOrders}`);
+    addWrappedText(`Order Amount: ${formatAmount(totals.totalOrderAmountUsd, totals.totalOrderAmountLbp)}`);
+    addWrappedText(`Delivery Fees: ${formatAmount(totals.totalDeliveryFeesUsd, totals.totalDeliveryFeesLbp)}`);
+    addWrappedText(`Total Due: ${formatAmount(totals.totalDueToClientUsd, totals.totalDueToClientLbp)}`);
+
+    doc.save(`Statement-${clientName.replace(/[^a-zA-Z0-9]/g, '_')}-${format(new Date(), 'yyyyMMdd')}.pdf`);
+    toast.success('Statement exported as PDF');
   };
 
   const generateWhatsAppText = () => {
@@ -290,6 +459,14 @@ export function ClientStatementPreview({
           <Button onClick={() => { issueStatementMutation.mutate(); onOpenChange(false); }} disabled={issueStatementMutation.isPending}>
             <FileText className="mr-1.5 h-3.5 w-3.5" />
             Issue Statment
+          </Button>
+          <Button onClick={() => { exportStatementAsPdf(); onOpenChange(false); }} disabled={issueStatementMutation.isPending}>
+            <FileText className="mr-1.5 h-3.5 w-3.5" />
+            Export PDF
+          </Button>
+          <Button onClick={() => { exportStatementAsExcel(); onOpenChange(false); }} disabled={issueStatementMutation.isPending}>
+            <FileText className="mr-1.5 h-3.5 w-3.5" />
+            Export Excel
           </Button>
           <Button onClick={copyToClipboard}>
             <Copy className="mr-2 h-4 w-4" />

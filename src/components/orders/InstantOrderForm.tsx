@@ -7,11 +7,12 @@ import { Input } from "@/components/ui/input";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Check, ChevronsUpDown, Plus } from "lucide-react";
+import { Check, ChevronsUpDown, Plus, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { z } from "zod";
+import * as XLSX from 'xlsx';
 
 // Validation schema for instant order creation
 const instantOrderSchema = z.object({
@@ -636,15 +637,172 @@ export function InstantOrderForm() {
     },
   });
 
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      const bstr = evt.target?.result;
+      const wb = XLSX.read(bstr, { type: 'binary' });
+      const wsname = wb.SheetNames[0];
+      const ws = wb.Sheets[wsname];
+
+      // Convert to JSON: This gives you an array of objects based on Excel Headers
+      const data = XLSX.utils.sheet_to_json(ws);
+
+      await processBulkInsert(data);
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  // Helper to generate a random phone number
+  const generateRandomPhone = () => `03${Math.floor(100000 + Math.random() * 900000)}`;
+
+  const processBulkInsert = async (rows: any[]) => {
+    toast.loading(`Preparing to sync ${rows.length} records...`);
+
+    // 1. Pre-fetch all clients to optimize lookups
+    const { data: allClients, error: clientFetchError } = await supabase
+      .from("clients")
+      .select("id, name");
+
+    if (clientFetchError) {
+      toast.error("Could not fetch clients from database");
+      return;
+    }
+
+    const { data: allDrivers, error: driverFetchError } = await supabase
+      .from("drivers")
+      .select("id, name");
+
+    if (driverFetchError) {
+      toast.error("Could not fetch drivers from database");
+      return;
+    }
+
+    let clientsMap = allClients || [];
+    let driversMap = allDrivers || [];
+
+    for (const row of rows) {
+      try {
+        const clientNameFromExcel = row["Client Name"]?.trim();
+
+        if (!clientNameFromExcel) continue;
+
+        // 2. Find or Create the Client
+        let targetClient = clientsMap.find(
+          (c) => c.name?.toLowerCase() === clientNameFromExcel.toLowerCase()
+        );
+
+        if (!targetClient) {
+          // Create new client if not found
+          const { data: newClient, error: createError } = await supabase
+            .from("clients")
+            .insert({
+              name: clientNameFromExcel,
+              phone: generateRandomPhone(),
+              type: "Individual", // Default type for instant orders
+            })
+            .select()
+            .single();
+
+          if (createError) throw new Error(`Failed to create client ${clientNameFromExcel}`);
+
+          targetClient = newClient;
+          clientsMap.push(newClient); // Add to local map for next rows
+        }
+
+        const DriverNameFromExcel = row["Driver"]?.trim();
+
+        if (!DriverNameFromExcel) continue;
+
+        // 2. Find or Create the Driver
+        let targetDriver = driversMap.find(
+          (c) => c.name?.toLowerCase() === DriverNameFromExcel.toLowerCase()
+        );
+
+        // 3. Map Excel columns to the Mutation structure for instant orders
+        const mappedData: NewOrderRow = {
+          id: `bulk-${Date.now()}-${Math.random()}`,
+          client_id: targetClient.id,
+          address: row["Delivery Address"] || "",
+          driver_id: targetDriver.id || "",
+          order_amount_usd: parseExcelCurrency(row["Amount USD"]).toString(),
+          order_amount_lbp: parseExcelCurrency(row["Amount LBP"]).toString(),
+          delivery_fee_usd: parseExcelCurrency(row["Fee USD"]).toString(),
+          delivery_fee_lbp: parseExcelCurrency(row["Fee LBP"]).toString(),
+          notes: row["Notes"] || "",
+          driver_paid_for_client: row["Driver Paid"]?.toString().toLowerCase().includes("yes") || false,
+          company_paid_for_order: row["Company Paid"]?.toString().toLowerCase().includes("yes") || false,
+        };
+
+        // 4. Trigger your existing mutation
+        console.log("mappedData: ", mappedData);
+        await createOrderMutation.mutateAsync(mappedData);
+
+      } catch (err: any) {
+        console.error("Row processing error:", err);
+        toast.error(`Error on row ${row["Client Name"]}: ${err.message}`);
+      }
+    }
+
+    toast.dismiss();
+    toast.success("Bulk insertion completed!");
+  };
+
+  // Helper to clean currency strings
+  const parseExcelCurrency = (val: any) => {
+    if (!val) return 0;
+    // Removes "$" and commas
+    const cleaned = val.toString().replace(/[$,]/g, '');
+    return isNaN(parseFloat(cleaned)) ? 0 : parseFloat(cleaned);
+  };
+
+  const downloadTemplate = () => {
+    const workbook = XLSX.utils.book_new();
+    const templateData = [
+      {
+        "Client Name": "Example Client",
+        "Delivery Address": "123 Main Street, City",
+        "Amount USD": "10.00",
+        "Amount LBP": "15000",
+        "Fee USD": "2.00",
+        "Fee LBP": "3000",
+        "Notes": "Sample order notes",
+        "Driver Paid": "No",
+        "Company Paid": "No"
+      }
+    ];
+    const worksheet = XLSX.utils.json_to_sheet(templateData);
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Instant Orders Template');
+    XLSX.writeFile(workbook, 'Instant_Orders_Template.xlsx');
+  };
+
 
   return (
     <div className="space-y-2">
       <div className="flex justify-between items-center">
         <h3 className="text-sm font-semibold">Quick Instant Order Entry</h3>
-        <Button onClick={() => addNewRow(false)} size="sm" variant="outline" tabIndex={-1}>
-          <Plus className="h-4 w-4 mr-1" />
-          Add Row
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button onClick={downloadTemplate} size="sm" variant="outline" tabIndex={-1}>
+            <Download className="h-4 w-4 mr-1" />
+            Download Template
+          </Button>
+          <div className="p-2 px-4 flex items-center gap-4 border-2 border-dashed border-gray-300 rounded-lg">
+            <h3 className="text-md font-bold">Import Excel</h3>
+            <input
+              type="file"
+              accept=".xlsx, .xls, .csv"
+              onChange={handleFileUpload}
+              className="block text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+            />
+          </div>
+          <Button onClick={() => addNewRow(false)} size="sm" variant="outline" tabIndex={-1}>
+            <Plus className="h-4 w-4 mr-1" />
+            Add Row
+          </Button>
+        </div>
       </div>
 
       <div className="border rounded-lg overflow-x-auto">

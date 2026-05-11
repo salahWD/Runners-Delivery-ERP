@@ -10,6 +10,7 @@ import { BulkActionsBar } from "@/components/orders/BulkActionsBar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Settings, Search, Pencil, Trash2 } from "lucide-react";
 import EditOrderDialog from "@/components/orders/EditOrderDialog";
 import { AddressSettingsDialog } from "@/components/orders/AddressSettingsDialog";
@@ -39,6 +40,7 @@ interface Order {
   driver_paid_amount_lbp?: number;
   driver_remit_status?: string;
   company_paid_for_order?: boolean;
+  fulfillment?: string;
   clients?: { name: string };
   drivers?: { name: string };
   third_parties?: { name: string };
@@ -96,6 +98,10 @@ const InstantOrders = () => {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [addressSettingsOpen, setAddressSettingsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [paymentFilter, setPaymentFilter] = useState<string>("all");
+  const [fulfillmentFilter, setFulfillmentFilter] = useState<string>("all");
+  const [settlementFilter, setSettlementFilter] = useState<string>("all");
   const [deleteOrderId, setDeleteOrderId] = useState<string | null>(null);
 
   const { data: orders, isLoading } = useQuery({
@@ -142,19 +148,44 @@ const InstantOrders = () => {
   }, [queryClient]);
 
   const filteredOrders = useMemo(() => {
-    if (!orders || !searchQuery.trim()) return orders;
+    if (!orders) return orders;
 
     const query = searchQuery.toLowerCase();
+
     return orders.filter((order) => {
-      return (
+      const date = new Date(order.created_at).toLocaleDateString();
+      const matchesSearch = !searchQuery.trim() || (
         order.clients?.name?.toLowerCase().includes(query) ||
         order.drivers?.name?.toLowerCase().includes(query) ||
         order.order_id?.toLowerCase().includes(query) ||
         order.address?.toLowerCase().includes(query) ||
+        date?.toLowerCase().includes(query) ||
+        (order.status == "Delivered" ? "DriverCollected" : order.status)?.toLowerCase().includes(query) ||
         order.notes?.toLowerCase().includes(query)
       );
+
+      const matchesStatus = statusFilter === "all" || order.status === statusFilter;
+
+      const matchesPayment = paymentFilter === "all" ||
+        (paymentFilter === "driver_due" && order.driver_paid_for_client && order.driver_remit_status !== "Collected") ||
+        (paymentFilter === "company_due" && order.company_paid_for_order && order.driver_remit_status !== "Collected") ||
+        (paymentFilter === "collected" && order.driver_remit_status === "Collected") ||
+        (paymentFilter === "pending" && !order.driver_paid_for_client && !order.company_paid_for_order && order.status !== "Delivered" && order.status !== "DriverCollected");
+
+      const matchesFulfillment = fulfillmentFilter === "all" || order.fulfillment === fulfillmentFilter;
+
+      let matchesSettlement = true;
+      if (settlementFilter === "pending_delivery") {
+        matchesSettlement = order.status !== 'Delivered' && order.status !== 'DriverCollected' && order.status !== 'Cancelled' && order.status !== 'Returned';
+      } else if (settlementFilter === "due_settlement") {
+        matchesSettlement = order.driver_remit_status !== 'Collected' && (order.status === 'Delivered' || order.status === 'DriverCollected');
+      } else if (settlementFilter === "settled") {
+        matchesSettlement = order.driver_remit_status === 'Collected';
+      }
+
+      return matchesSearch && matchesStatus && matchesPayment && matchesFulfillment && matchesSettlement;
     });
-  }, [orders, searchQuery]);
+  }, [orders, searchQuery, statusFilter, paymentFilter, fulfillmentFilter, settlementFilter]);
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -221,25 +252,75 @@ const InstantOrders = () => {
 
         <Card className="!mb-20">
           <CardContent className="p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">All Instant Orders</h3>
-              <div className="flex items-center gap-2">
-                <div className="relative">
-                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search by client, driver, address, notes..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-8 w-[350px]"
-                    autoFocus
-                  />
-                </div>
+            <div className="space-y-4 mb-4">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold">All Instant Orders</h3>
                 {filteredOrders && filteredOrders.length > 0 && (
                   <Checkbox
                     checked={filteredOrders.every((o) => selectedIds.includes(o.id))}
                     onCheckedChange={toggleSelectAll}
                   />
                 )}
+              </div>
+              <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
+                <div className="relative xl:col-span-2">
+                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search by client, driver, address, notes..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-8"
+                    autoFocus
+                  />
+                </div>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Order Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="New">New</SelectItem>
+                    <SelectItem value="Assigned">Assigned</SelectItem>
+                    <SelectItem value="PickedUp">Picked Up</SelectItem>
+                    <SelectItem value="Delivered">Delivered</SelectItem>
+                    <SelectItem value="DriverCollected">Driver Collected</SelectItem>
+                    <SelectItem value="Returned">Returned</SelectItem>
+                    <SelectItem value="Cancelled">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={paymentFilter} onValueChange={setPaymentFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Payment Type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Payment Types</SelectItem>
+                    <SelectItem value="driver_due">Driver Due</SelectItem>
+                    <SelectItem value="company_due">Company Paid</SelectItem>
+                    <SelectItem value="collected">Collected</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={fulfillmentFilter} onValueChange={setFulfillmentFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Fulfillment" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Fulfillment</SelectItem>
+                    <SelectItem value="InHouse">In-House</SelectItem>
+                    <SelectItem value="ThirdParty">Third Party</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={settlementFilter} onValueChange={setSettlementFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Settlement" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Settlement</SelectItem>
+                    <SelectItem value="pending_delivery">Pending Delivery</SelectItem>
+                    <SelectItem value="due_settlement">Due Settlement</SelectItem>
+                    <SelectItem value="settled">Settled</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <Table>

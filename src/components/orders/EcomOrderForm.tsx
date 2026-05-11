@@ -11,6 +11,8 @@ import { cn } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 
+import * as XLSX from 'xlsx';
+
 type NewOrderRow = {
   id: string;
   voucher_no: string;
@@ -516,14 +518,6 @@ export function EcomOrderForm() {
 
         if (clientError) throw clientError;
 
-        // await supabase.from('client_transactions').insert({
-        //   client_id: rowData.client_id,
-        //   type: 'Debit',
-        //   amount_usd: orderAmount,
-        //   amount_lbp: 0,
-        //   note: `Payment from client - order ${rowData.voucher_no} - (paid by company)`
-        // });
-
       }
 
       return rowData.id;
@@ -597,11 +591,129 @@ export function EcomOrderForm() {
 
   const validRowCount = newRows.filter(row => row.client_id && row.customer_phone).length;
 
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      const bstr = evt.target?.result;
+      const wb = XLSX.read(bstr, { type: 'binary' });
+      const wsname = wb.SheetNames[0];
+      const ws = wb.Sheets[wsname];
+
+      // Convert to JSON: This gives you an array of objects based on Excel Headers
+      const data = XLSX.utils.sheet_to_json(ws);
+
+      await processBulkInsert(data);
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  // Helper to generate a random phone number
+  const generateRandomPhone = () => `03${Math.floor(100000 + Math.random() * 900000)}`;
+
+  const processBulkInsert = async (rows: any[]) => {
+    toast.loading(`Preparing to sync ${rows.length} records...`);
+
+    // 1. Pre-fetch all clients to optimize lookups
+    const { data: allClients, error: clientFetchError } = await supabase
+      .from("clients")
+      .select("id, name");
+
+    if (clientFetchError) {
+      toast.error("Could not fetch clients from database");
+      return;
+    }
+
+    let clientsMap = allClients || [];
+
+    for (const row of rows) {
+      try {
+        const clientNameFromExcel = row["Client"]?.trim();
+        console.log(clientNameFromExcel)
+        if (!clientNameFromExcel) continue;
+
+        // 2. Find or Create the Client
+        let targetClient = clientsMap.find(
+          (c) => c.name?.toLowerCase() === clientNameFromExcel.toLowerCase()
+        );
+
+        if (!targetClient) {
+          // Create new client if not found
+          const { data: newClient, error: createError } = await supabase
+            .from("clients")
+            .insert({
+              name: clientNameFromExcel,
+              phone: generateRandomPhone(),
+              type: "Ecom", // Default type
+            })
+            .select()
+            .single();
+
+          if (createError) throw new Error(`Failed to create client ${clientNameFromExcel}`);
+
+          targetClient = newClient;
+          clientsMap.push(newClient); // Add to local map for next rows
+        }
+
+        const isRunnersOrder = row["Courier"].toLowerCase().includes("runners");
+        // 3. Map Excel columns to the Mutation structure
+        // Note: We use "Customer Name" for the customer logic in your code
+        const mappedData: NewOrderRow = {
+          id: `bulk-${Date.now()}-${Math.random()}`,
+          voucher_no: row["Order Ref"] ? row["Order Ref"] : `VR-${Math.floor(Math.random() * 10000)}`,
+          client_id: targetClient.id,
+          customer_name: row["Customer"],
+          customer_phone: row["Mobile Number"] ? row["Mobile Number"] : Math.floor(Math.random() * 10000000000).toString(), // Ensure this exists if needed for your mutation logic
+          customer_address: row["Delivery Address"],
+          total_with_delivery_usd: parseExcelCurrency(row["Total Amount"]),
+          delivery_fee_usd: parseExcelCurrency(row["Delivery Fee"]),
+          prepaid_by_company: row["Prepaid"]?.toLowerCase().includes("yes"),
+          // fulfillment: isRunnersOrder ? "InHouse" : "ThirdParty",
+          fulfillment: "InHouse",
+          amount_due_to_client_usd: parseExcelCurrency(row["Due"]),
+
+          third_party_id: null,
+          third_party_fee_usd: null
+        };
+
+        // 4. Trigger your existing mutation
+        console.log("mappedData: ", mappedData);
+        await createOrderMutation.mutateAsync(mappedData);
+
+      } catch (err: any) {
+        console.error("Row processing error:", err);
+        toast.error(`Error on row ${row["Client"]}: ${err.message}`);
+      }
+    }
+
+    toast.dismiss();
+    toast.success("Bulk insertion completed!");
+  };
+
+  // Helper to clean currency strings
+  const parseExcelCurrency = (val: any) => {
+    if (!val) return "0";
+    // Removes "$" and commas
+    const cleaned = val.toString().replace(/[$,]/g, '');
+    return isNaN(parseFloat(cleaned)) ? "0" : cleaned;
+  };
+
   return (
     <div className="space-y-2">
       <div className="flex justify-between items-center">
         <h3 className="text-sm font-semibold">Quick E-commerce Entry</h3>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          <div className="p-2 px-4 flex items-center gap-4 border-2 border-dashed border-gray-300 rounded-lg">
+            <h3 className="text-md font-bold">Import Excel</h3>
+            <input
+              type="file"
+              accept=".xlsx, .xls, .csv"
+              onChange={handleFileUpload}
+              className="block text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+            />
+          </div>
           <Button onClick={addNewRow} size="sm" variant="outline">
             <Plus className="h-4 w-4 mr-1" />
             Add Row
