@@ -262,7 +262,7 @@ const InstantOrders = () => {
                   />
                 )}
               </div>
-              <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
+              <div className="grid grid-cols-1 xl:grid-cols-6 gap-4">
                 <div className="relative xl:col-span-2">
                   <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -327,18 +327,18 @@ const InstantOrders = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[50px]"></TableHead>
-                  <TableHead>Client</TableHead>
-                  <TableHead>Driver</TableHead>
-                  <TableHead>Address</TableHead>
-                  <TableHead>Amount USD</TableHead>
-                  <TableHead>Amount LBP</TableHead>
-                  <TableHead>Fee USD</TableHead>
-                  <TableHead>Fee LBP</TableHead>
-                  <TableHead>Order Status</TableHead>
-                  <TableHead>Payment Status</TableHead>
-                  <TableHead>Notes</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead className="w-[100px]">Actions</TableHead>
+                  <TableHead className="px-1">Client</TableHead>
+                  <TableHead className="px-1">Address</TableHead>
+                  <TableHead className="px-1">Amount USD</TableHead>
+                  <TableHead className="px-1">Amount LBP</TableHead>
+                  <TableHead className="px-1">Fee USD</TableHead>
+                  <TableHead className="px-1">Fee LBP</TableHead>
+                  <TableHead className="px-1">Driver</TableHead>
+                  <TableHead className="px-1">Notes</TableHead>
+                  <TableHead className="px-1">Order Status</TableHead>
+                  <TableHead className="px-1">Payment Status</TableHead>
+                  <TableHead className="px-1">Created</TableHead>
+                  <TableHead className="px-1 w-[100px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -349,36 +349,36 @@ const InstantOrders = () => {
                       <TableCell onClick={(e) => e.stopPropagation()}>
                         <Checkbox checked={selectedIds.includes(order.id)} onCheckedChange={() => toggleSelect(order.id)} />
                       </TableCell>
-                      <TableCell>{order.clients?.name}</TableCell>
-                      <TableCell>{order.drivers?.name || "-"}</TableCell>
-                      <TableCell className="max-w-[200px] truncate">{order.address}</TableCell>
-                      <TableCell className="font-mono text-right">
+                      <TableCell className="px-1">{order.clients?.name}</TableCell>
+                      <TableCell className="px-1 max-w-[200px] truncate">{order.address}</TableCell>
+                      <TableCell className="px-1 font-mono">
                         {order.driver_paid_for_client ? (
                           <span className="text-red-600">{formatUSD(order.driver_paid_amount_usd || order.order_amount_usd)}</span>
                         ) : (
                           formatUSD(order.order_amount_usd)
                         )}
                       </TableCell>
-                      <TableCell className="font-mono text-right">
+                      <TableCell className="px-1 font-mono">
                         {order.driver_paid_for_client ? (
                           <span className="text-red-600">{formatLBP(order.driver_paid_amount_lbp || order.order_amount_lbp)}</span>
                         ) : (
                           formatLBP(order.order_amount_lbp)
                         )}
                       </TableCell>
-                      <TableCell className="font-mono text-right">{formatUSD(order.delivery_fee_usd)}</TableCell>
-                      <TableCell className="font-mono text-right">{formatLBP(order.delivery_fee_lbp)}</TableCell>
-                      <TableCell>{getStatusBadge(order.status)}</TableCell>
-                      <TableCell>
+                      <TableCell className="px-1 font-mono">{formatUSD(order.delivery_fee_usd)}</TableCell>
+                      <TableCell className="px-1 font-mono">{formatLBP(order.delivery_fee_lbp)}</TableCell>
+                      <TableCell className="px-1">{order.drivers?.name || "-"}</TableCell>
+                      <TableCell className="px-1 max-w-[150px] truncate">{order.notes || "-"}</TableCell>
+                      <TableCell className="px-1">{getStatusBadge(order.status)}</TableCell>
+                      <TableCell className="px-1">
                         <Badge variant={paymentStatus.variant} className={paymentStatus.className}>
                           {paymentStatus.label}
                         </Badge>
                       </TableCell>
-                      <TableCell className="max-w-[150px] truncate">{order.notes || "-"}</TableCell>
-                      <TableCell className="text-xs whitespace-nowrap">
+                      <TableCell className="px-1 text-xs whitespace-nowrap">
                         {new Date(order.created_at).toLocaleDateString()} {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="px-1">
                         <div className="flex gap-1">
                           <Button
                             size="sm"
@@ -413,7 +413,7 @@ const InstantOrders = () => {
           </CardContent>
         </Card>
 
-        <BulkActionsBar selectedIds={selectedIds} onClearSelection={() => setSelectedIds([])} />
+        <BulkActionsBar thirdPartyDisabled={true} selectedIds={selectedIds} onClearSelection={() => setSelectedIds([])} />
 
         {selectedOrder && (
           <EditOrderDialog

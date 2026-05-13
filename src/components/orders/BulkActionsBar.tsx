@@ -23,9 +23,10 @@ import { DeliveryAttemptDialog } from "./DeliveryAttemptDialog";
 interface BulkActionsBarProps {
   selectedIds: string[];
   onClearSelection: () => void;
+  thirdPartyDisabled?: boolean;
 }
 
-export function BulkActionsBar({ selectedIds, onClearSelection }: BulkActionsBarProps) {
+export function BulkActionsBar({ selectedIds, onClearSelection, thirdPartyDisabled = false }: BulkActionsBarProps) {
   const queryClient = useQueryClient();
   const [driverOpen, setDriverOpen] = useState(false);
   const [thirdPartyOpen, setThirdPartyOpen] = useState(false);
@@ -60,7 +61,7 @@ export function BulkActionsBar({ selectedIds, onClearSelection }: BulkActionsBar
       if (selectedIds.length === 0) return [];
       const { data, error } = await supabase
         .from("orders")
-        .select("id, order_type, client_id, prepaid_by_company, prepaid_by_runners, clients(name)")
+        .select("id, order_type, client_id, status, prepaid_by_company, prepaid_by_runners, clients(name)")
         .in("id", selectedIds);
       if (error) throw error;
       return data;
@@ -86,6 +87,7 @@ export function BulkActionsBar({ selectedIds, onClearSelection }: BulkActionsBar
 
   const assignDriverMutation = useMutation({
     mutationFn: async (driverId: string) => {
+
       // Update driver_id, set fulfillment to InHouse, clear third_party_id, and set status to "Assigned" if currently "New"
       const { error } = await supabase
         .from("orders")
@@ -327,6 +329,15 @@ export function BulkActionsBar({ selectedIds, onClearSelection }: BulkActionsBar
               <CommandList>
                 <CommandEmpty>No driver found.</CommandEmpty>
                 <CommandGroup>
+                  <CommandItem
+                    key={0}
+                    onSelect={() => {
+                      assignDriverMutation.mutate(null);
+                      setDriverOpen(false);
+                    }}
+                  >
+                    No Driver
+                  </CommandItem>
                   {drivers.map((driver) => (
                     <CommandItem
                       key={driver.id}
@@ -344,35 +355,37 @@ export function BulkActionsBar({ selectedIds, onClearSelection }: BulkActionsBar
           </PopoverContent>
         </Popover>
 
-        <Popover open={thirdPartyOpen} onOpenChange={setThirdPartyOpen}>
-          <PopoverTrigger asChild>
-            <Button size="sm" variant="secondary">
-              <Truck className="h-4 w-4 mr-2" />
-              Assign 3rd Party
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-[200px] p-0 bg-popover">
-            <Command>
-              <CommandInput placeholder="Search 3rd party..." />
-              <CommandList>
-                <CommandEmpty>No third party found.</CommandEmpty>
-                <CommandGroup>
-                  {thirdParties.map((tp) => (
-                    <CommandItem
-                      key={tp.id}
-                      onSelect={() => {
-                        assignThirdPartyMutation.mutate(tp.id);
-                        setThirdPartyOpen(false);
-                      }}
-                    >
-                      {tp.name}
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
+        {!thirdPartyDisabled && (
+          <Popover open={thirdPartyOpen} onOpenChange={setThirdPartyOpen}>
+            <PopoverTrigger asChild>
+              <Button size="sm" variant="secondary">
+                <Truck className="h-4 w-4 mr-2" />
+                Assign 3rd Party
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[200px] p-0 bg-popover">
+              <Command>
+                <CommandInput placeholder="Search 3rd party..." />
+                <CommandList>
+                  <CommandEmpty>No third party found.</CommandEmpty>
+                  <CommandGroup>
+                    {thirdParties.map((tp) => (
+                      <CommandItem
+                        key={tp.id}
+                        onSelect={() => {
+                          assignThirdPartyMutation.mutate(tp.id);
+                          setThirdPartyOpen(false);
+                        }}
+                      >
+                        {tp.name}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+        )}
 
         <Popover open={statusOpen} onOpenChange={setStatusOpen}>
           <PopoverTrigger asChild>

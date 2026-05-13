@@ -727,7 +727,7 @@ export function InstantOrderForm() {
           id: `bulk-${Date.now()}-${Math.random()}`,
           client_id: targetClient.id,
           address: row["Delivery Address"] || "",
-          driver_id: targetDriver.id || "",
+          driver_id: targetDriver?.id || "",
           order_amount_usd: parseExcelCurrency(row["Amount USD"]).toString(),
           order_amount_lbp: parseExcelCurrency(row["Amount LBP"]).toString(),
           delivery_fee_usd: parseExcelCurrency(row["Fee USD"]).toString(),
@@ -779,6 +779,39 @@ export function InstantOrderForm() {
     XLSX.writeFile(workbook, 'Instant_Orders_Template.xlsx');
   };
 
+  const [isBulkSaving, setIsBulkSaving] = useState(false);
+
+  const saveAllOrders = async () => {
+    const validRows = newRows.filter(row => row.client_id && row.address);
+    if (validRows.length === 0) {
+      toast.error("No valid orders to save. Each order needs a client and delivery address.");
+      // return;
+    }
+
+    setIsBulkSaving(true);
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const row of validRows) {
+      try {
+        await createOrderMutation.mutateAsync(row);
+        successCount++;
+      } catch (error) {
+        errorCount++;
+      }
+    }
+
+    setIsBulkSaving(false);
+
+    if (successCount > 0 && errorCount === 0) {
+      toast.success(`${successCount} order(s) saved successfully!`);
+    } else if (successCount > 0 && errorCount > 0) {
+      toast.warning(`${successCount} saved, ${errorCount} failed`);
+    }
+  };
+
+  const validRowCount = newRows.filter(row => row.client_id && row.address).length;
+
 
   return (
     <div className="space-y-2">
@@ -801,6 +834,13 @@ export function InstantOrderForm() {
           <Button onClick={() => addNewRow(false)} size="sm" variant="outline" tabIndex={-1}>
             <Plus className="h-4 w-4 mr-1" />
             Add Row
+          </Button>
+          <Button
+            onClick={saveAllOrders}
+            size="sm"
+            disabled={validRowCount === 0 || isBulkSaving}
+          >
+            {isBulkSaving ? 'Saving...' : `Save All (${validRowCount})`}
           </Button>
         </div>
       </div>

@@ -112,7 +112,8 @@ const EcomOrders = () => {
         minute: '2-digit'
       });
 
-      const matchesStatus = statusFilter === "all" || order.status === statusFilter;
+      const matchesStatus = statusFilter === "all" || ((order.status == "DriverCollected" && statusFilter === "Delivered") || order.status === statusFilter);
+
       const matchesPayment = paymentFilter === "all" ||
         (paymentFilter === "cash" && order.prepaid_by_company) ||
         (paymentFilter === "cash_pending" && order.prepaid_by_runners && !order.prepaid_by_company) ||
@@ -207,7 +208,7 @@ const EcomOrders = () => {
 
         <Card className="!mb-20">
           <CardContent className="p-6">
-            <div className="space-y-4">
+            <div className="space-y-4 mb-3">
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-semibold">All E-commerce Orders</h3>
                 {filteredOrders && filteredOrders.length > 0 && (
@@ -218,8 +219,8 @@ const EcomOrders = () => {
                 )}
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                <div className="relative md:col-span-1">
+              <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+                <div className="relative md:col-span-2">
                   <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
                     placeholder="Search..."
@@ -282,29 +283,29 @@ const EcomOrders = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[50px]"></TableHead>
-                  <TableHead>Voucher</TableHead>
-                  <TableHead>Client</TableHead>
-                  <TableHead>Customer Name</TableHead>
-                  <TableHead>Phone</TableHead>
-                  <TableHead>Address</TableHead>
-                  <TableHead>Total</TableHead>
-                  <TableHead>Fee</TableHead>
-                  <TableHead>Due</TableHead>
-                  <TableHead>Payment Type</TableHead>
-                  <TableHead>Delivery</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead className="w-[80px]">Actions</TableHead>
+                  <TableHead className="px-1">Voucher</TableHead>
+                  <TableHead className="px-1">Client</TableHead>
+                  <TableHead className="px-1">Customer Name</TableHead>
+                  <TableHead className="px-1">Phone</TableHead>
+                  <TableHead className="px-1">Address</TableHead>
+                  <TableHead className="px-1">Total</TableHead>
+                  <TableHead className="px-1">Fee</TableHead>
+                  <TableHead className="px-1">Due</TableHead>
+                  <TableHead className="px-1">Payment Type</TableHead>
+                  <TableHead className="px-1">Delivery</TableHead>
+                  <TableHead className="px-1">Status</TableHead>
+                  <TableHead className="px-1">Created</TableHead>
+                  <TableHead className="px-1 w-[80px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredOrders?.map((order) => (
                   <TableRow key={order.id} className="hover:bg-muted/50">
-                    <TableCell onClick={(e) => e.stopPropagation()}>
+                    <TableCell className="px-1" onClick={(e) => e.stopPropagation()}>
                       <Checkbox checked={selectedIds.includes(order.id)} onCheckedChange={() => toggleSelect(order.id)} />
                     </TableCell>
                     <TableCell
-                      className="font-medium cursor-pointer"
+                      className="px-1 font-medium cursor-pointer"
                       onClick={() => {
                         setSelectedOrder(order);
                         setDialogOpen(true);
@@ -312,14 +313,14 @@ const EcomOrders = () => {
                     >
                       {order.voucher_no || "-"}
                     </TableCell>
-                    <TableCell>{order.clients?.name}</TableCell>
-                    <TableCell>{order.customers?.name || "-"}</TableCell>
-                    <TableCell>{order.customers?.phone || "-"}</TableCell>
-                    <TableCell className="max-w-[200px] truncate">{order.address}</TableCell>
-                    <TableCell>${(Number(order.order_amount_usd) + Number(order.delivery_fee_usd)).toFixed(2)}</TableCell>
-                    <TableCell>${Number(order.delivery_fee_usd).toFixed(2)}</TableCell>
-                    <TableCell>${Number(order.amount_due_to_client_usd).toFixed(2)}</TableCell>
-                    <TableCell>
+                    <TableCell className="px-1">{order.clients?.name}</TableCell>
+                    <TableCell className="px-1">{order.customers?.name || "-"}</TableCell>
+                    <TableCell className="px-1">{order.customers?.phone || "-"}</TableCell>
+                    <TableCell className="px-1 max-w-[200px] truncate">{order.address}</TableCell>
+                    <TableCell className="px-1">${(Number(order.order_amount_usd) + Number(order.delivery_fee_usd)).toFixed(2)}</TableCell>
+                    <TableCell className="px-1">${Number(order.delivery_fee_usd).toFixed(2)}</TableCell>
+                    <TableCell className="px-1">${Number(order.amount_due_to_client_usd).toFixed(2)}</TableCell>
+                    <TableCell className="px-1">
                       {order.prepaid_by_company ? (
                         // Cash-based order that was prepaid
                         order.driver_remit_status === 'Collected' ? (
@@ -343,13 +344,13 @@ const EcomOrders = () => {
                         )
                       )}
                     </TableCell>
-                    <TableCell className="text-xs">
+                    <TableCell className="px-1 text-xs">
                       {order.fulfillment === "InHouse"
                         ? (order.drivers?.name || "Unassigned")
                         : (order.third_parties?.name || "Third-Party")}
                     </TableCell>
-                    <TableCell>{getStatusBadge(order.status)}</TableCell>
-                    <TableCell className="text-xs">
+                    <TableCell className="px-1">{getStatusBadge(order.status)}</TableCell>
+                    <TableCell className="px-1 text-xs">
                       {new Date(order.created_at).toLocaleString('en-US', {
                         month: 'short',
                         day: 'numeric',
@@ -357,7 +358,7 @@ const EcomOrders = () => {
                         minute: '2-digit'
                       })}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="px-1">
                       <Button
                         variant="ghost"
                         size="sm"

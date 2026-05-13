@@ -1,3 +1,45 @@
 - عمل نوع جديد من طلبات الecom وهو طلبات السحب ويكون نفس المنطق الخاص بطلب الprepaid ولكن السعر يكون بالناقص (يظهر على انه موجب وليس سالب)
 ----------------------------------------------------------------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------------------------------------------
+
+Driver WhatsApp Statements: Provide distinct copy templates for three stages: before formatting, before issuing the statement, and after issuance. ❓🚫
+
+Unassign Driver: Enable the ability to unassign a driver from an order once they have been assigned. ✅
+
+Global Filters: Implement filtering by Date and Status across the system. ✅
+
+Company Paid Logic: Fix the bug where deleted "Company Paid" orders do not reverse transactions; consider removing "Company Paid" entirely to avoid mistakes, favoring "Driver Paid" for large amounts.
+
+Accounting Infrastructure: Build out the Chart of Accounts, Trial Balance, financial statements, and transaction type entries. ❓🚫
+
+3rd Party Restrictions: Remove the "Assign 3rd Party" option from Instant Orders. ✅
+
+Expense Categories: Add a feature to categorize system expenses. ❓🚫
+
+Cash Box: Adjust the Cash Box view and add a USD/LBP currency exchange feature to match physical cash levels. 🚫
+
+Monthly Reporting: Generate automated reports for clients and drivers (total orders, income, days worked, etc.).❓
+
+Bulk Saving: Enable the ability to save multiple orders at once instead of one by one. ✅
+
+UI Density: Tighten the spacing in the "All Orders" list to make the view more compact. ✅
+
+Column Reordering: Move the Driver column to the right of "Fee" and place the "Notes" column immediately after the driver’s name. ✅
+
+Role-Based Permissions: Restrict specific actions like accounting deletions and adding new drivers/customers to specific user roles.❓
+
+Duplicate Status Protection: Prevent the system from re-triggering accounting entries if an order already marked "Delivered" is saved as "Delivered" again.
+
+Branding: Implement logo and branding integration throughout the platform.❓
+
+Statement Transparency: Ensure all transactions, including payments on account, reflect in both client and driver statements.
+
+Bulk Filter Fix: Fix the inability to filter orders by assigned/unassigned driver names for bulk actions. ❓
+
+3rd Party Payment Fix: Confirm and ensure the logic for when a 3rd party pays for an order is functioning correctly.
+
+Back-entry Registration: Allow operators to register forgotten orders the next day and include them in a statement before it is issued.🚫❓
+
+E-com Statement Bug: Fix the issue where E-com orders do not show up for statement issuance (currently only showing the balance). ✅
+
+E-com Assignment Flow: Allow E-com orders to be saved first and assigned to in-house or 3rd party later, ensuring 3rd party fees remain editable after the order is created currently not possiblee

@@ -171,12 +171,10 @@ export function ClientStatementsTab() {
     queryKey: ['statement-orders', previewStatement?.id],
     queryFn: async () => {
       if (!previewStatement?.order_refs?.length) return [];
-
       const { data, error } = await supabase
         .from('orders')
         .select(`*, customers(phone, name, address), drivers(name)`)
         .or(previewStatement.order_refs.map((ref: string) => `order_id.eq.${ref},voucher_no.eq.${ref}`).join(','));
-
       if (error) throw error;
       return data || [];
     },
