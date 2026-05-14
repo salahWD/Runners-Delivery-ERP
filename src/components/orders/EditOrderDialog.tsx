@@ -60,9 +60,9 @@ interface Order {
 }
 
 type FeePayer = 'customer' | 'client' | 'split';
-type statusTypes = "New" | "Assigned" | "PickedUp" | "Delivered" | "Returned" | "Cancelled" | "DriverCollected" | "CustomerCollected";
+type statusTypes = "New" | "Assigned" | "PickedUp" | "Delivered" | "Returned" | "Cancelled" | "DriverCollected";
 
-const deliveryStatuses = ['Delivered', 'DriverCollected', 'CustomerCollected'];
+const deliveryStatuses = ['Delivered', 'DriverCollected'];
 
 interface EditOrderDialogProps {
   order: Order;
@@ -236,7 +236,7 @@ export default function EditOrderDialog({ order, open, onOpenChange }: EditOrder
       if (error) throw error;
 
       // If status changed to Delivered, process the accounting
-      if (!deliveryStatuses.includes(previousStatus) && deliveryStatuses.includes(formData.status)) {
+      if (!deliveryStatuses.includes(previousStatus) && deliveryStatuses.includes(formData.status) && previousStatus !== formData.status) {
 
         console.log('Order marked as delivered, processing accounting...');
 
@@ -312,7 +312,7 @@ export default function EditOrderDialog({ order, open, onOpenChange }: EditOrder
   const deleteOrderMutation = useMutation({
     mutationFn: async () => {
       // Check if order was delivered and needs accounting reversal
-      if (order.driver_remit_status && order.status === 'Delivered') {
+      if (order.driver_remit_status && ['Delivered', 'DriverCollected'].includes(order.status)) {
         console.log('Reversing accounting for delivered order:', order.order_id);
 
         // 1. Delete driver transaction
@@ -377,9 +377,38 @@ export default function EditOrderDialog({ order, open, onOpenChange }: EditOrder
         }
 
         console.log('Successfully reversed all accounting for order:', order.order_id);
+
       }
 
-      // 5. Finally delete the order
+      if (order.company_paid_for_order) {
+        // 5. reverse cashbox transaction
+        const today = new Date().toISOString().split('T')[0];
+        const { error: cashboxError } = await (supabase.rpc as any)('update_cashbox_atomic', {
+          p_date: today,
+          p_cash_in_usd: 0,
+          p_cash_in_lbp: 0,
+          p_cash_out_usd: Number(order.order_amount_usd) * -1,
+          p_cash_out_lbp: Number(order.order_amount_lbp) * -1,
+        });
+
+        if (cashboxError) {
+          throw new Error('Failed to update cashbox: ' + cashboxError.message);
+        }
+        const { error: cashboxTransactionError } = await (supabase.rpc as any)('add_cashbox_transaction', {
+          transaction_type: "IN",
+          amount_usd: order.order_amount_usd.toString(),
+          amount_lbp: order.order_amount_lbp.toString(),
+          note: order.notes || `Deleted order ${order.voucher_no || order.order_id} - (paid by company)`,
+          order_ref: order.voucher_no || order.order_id,
+          driver_id: order.driver_id || null,
+          client_id: order.client_id,
+          third_party_id: null,
+        });
+
+        if (cashboxTransactionError) throw cashboxTransactionError;
+      }
+
+      // 6. Finally delete the order
       const { error } = await supabase.from("orders").delete().eq("id", order.id);
       if (error) throw error;
     },

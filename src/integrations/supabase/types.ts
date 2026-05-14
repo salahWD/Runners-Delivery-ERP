@@ -706,6 +706,7 @@ export type Database = {
           amount_lbp: number | null
           amount_usd: number | null
           driver_id: string
+          statement_id: string
           id: string
           note: string | null
           order_ref: string | null
@@ -716,6 +717,7 @@ export type Database = {
           amount_lbp?: number | null
           amount_usd?: number | null
           driver_id: string
+          statement_id: string
           id?: string
           note?: string | null
           order_ref?: string | null
@@ -726,6 +728,7 @@ export type Database = {
           amount_lbp?: number | null
           amount_usd?: number | null
           driver_id?: string
+          statement_id?: string
           id?: string
           note?: string | null
           order_ref?: string | null
@@ -738,6 +741,13 @@ export type Database = {
             columns: ["driver_id"]
             isOneToOne: false
             referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "driver_transactions_statement_id_fkey"
+            columns: ["statement_id"]
+            isOneToOne: false
+            referencedRelation: "driver_statements"
             referencedColumns: ["id"]
           },
         ]

@@ -89,10 +89,9 @@ export default function GiveDriverCashDialog({ open, onOpenChange, date, presele
       });
 
       if (walletError) throw walletError;
-
       // Use atomic cashbox update
       const { error: cashboxError } = await (supabase.rpc as any)('update_cashbox_atomic', {
-        p_date: date.from.toISOString().split('T')[0],
+        p_date: new Date().toISOString().split('T')[0],
         p_cash_in_usd: 0,
         p_cash_in_lbp: 0,
         p_cash_out_usd: amountUsd,

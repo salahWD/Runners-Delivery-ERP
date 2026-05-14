@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -44,6 +44,14 @@ export function ClientStatementsTab() {
   const [expandedStatementId, setExpandedStatementId] = useState<string | null>(null);
   const [balanceBreakdownExpanded, setBalanceBreakdownExpanded] = useState(true);
 
+  useEffect(() => {
+    const selectedOrdersData = selectedOrders.map(o => filteredOrders.find(fo => fo.id === o));
+    if (selectedOrdersData.length) {
+      setDateTo(selectedOrdersData.reduce((prev, curr) => new Date(prev.created_at) < new Date(curr.created_at) ? prev : curr)?.created_at);
+      setDateFrom(selectedOrdersData.reduce((prev, curr) => new Date(prev.created_at) > new Date(curr.created_at) ? prev : curr)?.created_at);
+    }
+  }, [selectedOrders]);
+
   const { data: clients } = useQuery({
     queryKey: ['clients-for-statement'],
     queryFn: async () => {
@@ -77,7 +85,7 @@ export function ClientStatementsTab() {
   });
 
   const { data: orders, isLoading } = useQuery({
-    queryKey: ['client-pending-orders', selectedClient, dateFrom, dateTo],
+    queryKey: ['client-pending-orders', selectedClient],
     queryFn: async () => {
       if (!selectedClient) return [];
 
@@ -98,12 +106,12 @@ export function ClientStatementsTab() {
         .select(`*, customers(phone, name, address), drivers(name)`)
         .eq('client_id', selectedClient)
         .in('status', ['Delivered', 'DriverCollected'])
-        .gte('created_at', dateFrom)
-        .lte('created_at', dateTo + 'T23:59:59')
+        // .gte('created_at', dateFrom)
+        // .lte('created_at', dateTo + 'T23:59:59')
         .order('created_at', { ascending: false });
 
-      console.log(selectedClient, dateFrom, dateTo, data)
       if (error) throw error;
+
       return data?.filter(order => {
         const orderRef = order.order_type === 'ecom' ? (order.voucher_no || order.order_id) : order.order_id;
         // Filter out orders already in statements
@@ -293,6 +301,8 @@ export function ClientStatementsTab() {
       const { data: statementIdData, error: idError } = await supabase.rpc('generate_client_statement_id');
       if (idError) throw idError;
 
+      // period_from: dateFrom,
+      // period_to: dateTo,
       const { error: insertError } = await supabase.from('client_statements').insert({
         client_id: selectedClient,
         statement_id: statementIdData,
@@ -490,7 +500,7 @@ export function ClientStatementsTab() {
       <Card className="border-sidebar-border bg-sidebar/50">
         <CardContent className="pt-4 pb-3">
           <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
-            <div className="md:col-span-2">
+            <div className="md:col-span-3">
               <Label className="text-xs text-muted-foreground mb-1 block">Client</Label>
               <Popover open={clientSearchOpen} onOpenChange={setClientSearchOpen}>
                 <PopoverTrigger asChild>
@@ -545,15 +555,15 @@ export function ClientStatementsTab() {
                 </PopoverContent>
               </Popover>
             </div>
-            <div>
+            {/* <div>
               <Label className="text-xs text-muted-foreground mb-1 block">From</Label>
               <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-9" />
             </div>
             <div>
               <Label className="text-xs text-muted-foreground mb-1 block">To</Label>
               <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-9" />
-            </div>
-            <div>
+            </div> */}
+            <div className="md:col-span-2">
               <Label className="text-xs text-muted-foreground mb-1 block">Search</Label>
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />

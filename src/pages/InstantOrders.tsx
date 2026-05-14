@@ -217,14 +217,129 @@ const InstantOrders = () => {
     }
   };
 
+
   const deleteOrderMutation = useMutation({
     mutationFn: async (orderId: string) => {
-      const { error } = await supabase
-        .from('orders')
-        .delete()
-        .eq('id', orderId);
+      // const { error } = await supabase
+      //   .from('orders')
+      //   .delete()
+      //   .eq('id', orderId);
 
+      // if (error) throw error;
+
+
+      // ================================
+
+
+      const { data: order, error: orderError } = await supabase
+        .from('orders')
+        .select("*, clients(name), drivers(name, wallet_usd, wallet_lbp)")
+        .eq('id', orderId)
+        .single();
+
+      if (orderError) throw orderError;
+
+      // Check if order was delivered and needs accounting reversal
+      if (order.driver_remit_status && ['Delivered', 'DriverCollected'].includes(order.status)) {
+        console.log('Reversing accounting for delivered order:', order.order_id);
+
+        // 1. Delete driver transaction
+        if (order.driver_id) {
+          const { error: driverTxError } = await supabase
+            .from('driver_transactions')
+            .delete()
+            .eq('order_ref', order.order_id);
+
+          if (driverTxError) {
+            console.error('Error deleting driver transaction:', driverTxError);
+            throw new Error('Failed to reverse driver transaction');
+          }
+
+          // 2. Reverse driver wallet balance
+          const { data: driver, error: driverFetchError } = await supabase
+            .from('drivers')
+            .select('wallet_usd, wallet_lbp')
+            .eq('id', order.driver_id)
+            .single();
+
+          if (driverFetchError) throw driverFetchError;
+
+          if (driver) {
+            const { error: walletError } = await supabase
+              .from('drivers')
+              .update({
+                wallet_usd: Number(driver.wallet_usd) - Number(order.delivery_fee_usd),
+                wallet_lbp: Number(driver.wallet_lbp) - Number(order.delivery_fee_lbp),
+              })
+              .eq('id', order.driver_id);
+
+            if (walletError) {
+              console.error('Error reversing driver wallet:', walletError);
+              throw new Error('Failed to reverse driver wallet');
+            }
+          }
+        }
+
+        // 3. Delete client transaction
+        if (order.client_id) {
+          const { error: clientTxError } = await supabase
+            .from('client_transactions')
+            .delete()
+            .eq('order_ref', order.order_id);
+
+          if (clientTxError) {
+            console.error('Error deleting client transaction:', clientTxError);
+            throw new Error('Failed to reverse client transaction');
+          }
+        }
+
+        // 4. Delete accounting entry
+        const { error: accountingError } = await supabase
+          .from('accounting_entries')
+          .delete()
+          .eq('order_ref', order.order_id);
+
+        if (accountingError) {
+          console.error('Error deleting accounting entry:', accountingError);
+          throw new Error('Failed to reverse accounting entry');
+        }
+
+        console.log('Successfully reversed all accounting for order:', order.order_id);
+
+      }
+
+      if (order.company_paid_for_order) {
+        // 5. reverse cashbox transaction
+        const today = new Date().toISOString().split('T')[0];
+        const { error: cashboxError } = await (supabase.rpc as any)('update_cashbox_atomic', {
+          p_date: today,
+          p_cash_in_usd: 0,
+          p_cash_in_lbp: 0,
+          p_cash_out_usd: Number(order.order_amount_usd) * -1,
+          p_cash_out_lbp: Number(order.order_amount_lbp) * -1,
+        });
+
+        if (cashboxError) {
+          throw new Error('Failed to update cashbox: ' + cashboxError.message);
+        }
+        const { error: cashboxTransactionError } = await (supabase.rpc as any)('add_cashbox_transaction', {
+          transaction_type: "IN",
+          amount_usd: order.order_amount_usd.toString(),
+          amount_lbp: order.order_amount_lbp.toString(),
+          note: order.notes || `Deleted order ${order.voucher_no || order.order_id} - (paid by company)`,
+          order_ref: order.voucher_no || order.order_id,
+          driver_id: order.driver_id || null,
+          client_id: order.client_id,
+          third_party_id: null,
+        });
+
+        if (cashboxTransactionError) throw cashboxTransactionError;
+      }
+
+      // 6. Finally delete the order
+      const { error } = await supabase.from("orders").delete().eq("id", orderId);
       if (error) throw error;
+
     },
     onSuccess: () => {
       toast({ title: 'Success', description: 'Order deleted successfully' });

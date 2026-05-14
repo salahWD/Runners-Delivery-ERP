@@ -152,12 +152,12 @@ export function BulkActionsBar({ selectedIds, onClearSelection, thirdPartyDisabl
       let orders = [];
       // Validate: Cannot mark as Delivered without a driver OR third party assigned
       if (['Delivered', 'DriverCollected'].includes(status)) {
-        // if (status === 'Delivered') {
         const { data: ordersData } = await supabase
           .from("orders")
-          .select("id, order_id, driver_id, third_party_id, fulfillment, company_paid_for_order, prepaid_by_runners, driver_paid_for_client, order_amount_usd, driver_paid_amount_usd, driver_paid_amount_lbp, delivery_fee_usd, order_amount_lbp, delivery_fee_lbp")
+          .select("id, status, order_id, driver_id, third_party_id, fulfillment, company_paid_for_order, prepaid_by_runners, driver_paid_for_client, order_amount_usd, driver_paid_amount_usd, driver_paid_amount_lbp, delivery_fee_usd, order_amount_lbp, delivery_fee_lbp")
           .in("id", selectedIds);
         orders = ordersData;
+        // if (status === 'Delivered') {
         const ordersWithoutAssignment = ordersData?.filter(order =>
           !order.driver_id && !order.third_party_id
         ) || [];
@@ -174,15 +174,17 @@ export function BulkActionsBar({ selectedIds, onClearSelection, thirdPartyDisabl
         updateData.delivered_at = new Date().toISOString();
       }
 
-      const { error } = await supabase.from("orders").update(updateData).in("id", selectedIds);
+      const selectedOrdersIds = orders.filter(o => o.status != status).map(o => o.id);
+
+      const { error } = await supabase.from("orders").update(updateData).in("id", selectedOrdersIds);
       if (error) throw error;
 
       // If status is Delivered, process accounting for each order
       // if (status === 'Delivered') {
       if (['Delivered', 'DriverCollected'].includes(status)) {
-        console.log(`Processing delivery accounting for ${selectedIds.length} orders...`);
+        console.log(`Processing delivery accounting for ${selectedOrdersIds.length} orders...`);
 
-        await Promise.all(selectedIds.map(async (orderId) => {
+        await Promise.all(selectedOrdersIds.map(async (orderId) => {
           const { error: functionError } = await supabase.functions.invoke('process-order-delivery', {
             body: { orderId }
           });
@@ -211,7 +213,7 @@ export function BulkActionsBar({ selectedIds, onClearSelection, thirdPartyDisabl
       }
 
       if (status == "cancelled") {
-        await Promise.all(selectedIds.map(async (orderId) => {
+        await Promise.all(selectedOrdersIds.map(async (orderId) => {
           const order = orders.find(o => o.id === orderId);
           if (!order) return;
 

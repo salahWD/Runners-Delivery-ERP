@@ -58,6 +58,24 @@ export function DriverStatementsTab() {
     },
   });
 
+  const { data: unassignedDriverTransactions, isLoading: unassignedTransactionsLoading } = useQuery({
+    queryKey: ['unassigned-driver-transactions', selectedDriver],
+    queryFn: async () => {
+      if (!selectedDriver) return [];
+
+      const { data: driverTransactions, error } = await supabase
+        .from('driver_transactions')
+        .select('*')
+        .eq('driver_id', selectedDriver)
+        .is('statement_id', null)
+        .order('ts', { ascending: false });
+
+      if (error) throw error;
+      return driverTransactions;
+    },
+    enabled: !!selectedDriver,
+  });
+
   const { data: orders, isLoading } = useQuery({
     queryKey: ['driver-pending-orders', selectedDriver, dateFrom, dateTo],
     queryFn: async () => {
@@ -104,6 +122,7 @@ export function DriverStatementsTab() {
 
       const { data, error } = await query;
       if (error) throw error;
+      console.log(data)
       return data;
     },
   });
@@ -363,12 +382,23 @@ export function DriverStatementsTab() {
         order_refs: orderRefs,
         // status: 'paid',
         status: 'unpaid',
-        paid_date: new Date().toISOString(),
+        paid_date: null,
         payment_method: 'cash',
         created_by: user?.id,
       });
 
       if (insertError) throw insertError;
+
+      console.log("statementIdData");
+      console.log(statementIdData);
+      console.log("unassignedDriverTransactions");
+      console.log(unassignedDriverTransactions);
+
+      const { error: transactionsError } = await supabase.from('driver_transactions').update({
+        statement_id: statementIdData,
+      }).in('id', unassignedDriverTransactions.map(t => t.id));
+
+      if (transactionsError) throw transactionsError;
 
       return statementIdData;
     },
@@ -384,6 +414,7 @@ export function DriverStatementsTab() {
       setIssuePreviewOpen(false);
     },
     onError: (error) => {
+      console.error(error.message)
       toast.error(`Failed: ${error.message}`);
     },
   });
@@ -498,7 +529,8 @@ export function DriverStatementsTab() {
                 type: 'Debit',
                 amount_usd: netDueUsd,
                 amount_lbp: netDueLbp,
-                note: `Statement ${selectedStatement.id} - Cash Collected`,
+                statement_id: selectedStatement.statement_id,
+                note: `Statement ${selectedStatement.statement_id} - Cash Collected`,
               });
             }
 
@@ -508,7 +540,8 @@ export function DriverStatementsTab() {
                 type: 'Credit',
                 amount_usd: Math.abs(netDueUsd),
                 amount_lbp: Math.abs(netDueLbp),
-                note: `Statement ${selectedStatement.id} - Refund for amounts paid`,
+                statement_id: selectedStatement.statement_id,
+                note: `Statement ${selectedStatement.statement_id} - Refund for amounts paid`,
               });
             }
 
@@ -1011,6 +1044,7 @@ export function DriverStatementsTab() {
               </div>
 
               {/* Orders Table */}
+              <h4 className='text-sm mb-0'>Pending Orders</h4>
               <div className="border rounded-lg overflow-hidden">
                 <Table>
                   <TableHeader>
@@ -1073,6 +1107,55 @@ export function DriverStatementsTab() {
                         </TableRow>
                       );
                     })}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* statments Table */}
+              <h4 className='text-sm mb-0'>Unassigned Transactions</h4>
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="text-xs bg-muted/50">
+                      <TableHead className="py-2">Date</TableHead>
+                      <TableHead className="py-2">Type</TableHead>
+                      <TableHead className="py-2">Order Ref</TableHead>
+                      <TableHead className="py-2 text-right">Amount USD</TableHead>
+                      <TableHead className="py-2 text-right">Amount LBP</TableHead>
+                      <TableHead className="py-2">Note</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {unassignedTransactionsLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="py-6 text-center text-sm text-muted-foreground">
+                          Loading transactions...
+                        </TableCell>
+                      </TableRow>
+                    ) : unassignedDriverTransactions?.length ? (
+                      unassignedDriverTransactions.map((transaction) => (
+                        <TableRow key={transaction.id} className="text-xs">
+                          <TableCell className="py-1.5 text-muted-foreground">
+                            {transaction.ts ? format(new Date(transaction.ts), 'MMM dd, yyyy') : '-'}
+                          </TableCell>
+                          <TableCell className="py-1.5">{transaction.type}</TableCell>
+                          <TableCell className="py-1.5 font-mono">{transaction.order_ref || '-'}</TableCell>
+                          <TableCell className="py-1.5 font-mono text-right">
+                            {transaction.amount_usd != null ? `$${Number(transaction.amount_usd).toFixed(2)}` : '-'}
+                          </TableCell>
+                          <TableCell className="py-1.5 font-mono text-right">
+                            {transaction.amount_lbp != null ? `${Number(transaction.amount_lbp).toLocaleString()} LL` : '-'}
+                          </TableCell>
+                          <TableCell className="py-1.5">{transaction.note || '-'}</TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={6} className="py-6 text-center text-sm text-muted-foreground">
+                          No unassigned driver transactions found.
+                        </TableCell>
+                      </TableRow>
+                    )}
                   </TableBody>
                 </Table>
               </div>
