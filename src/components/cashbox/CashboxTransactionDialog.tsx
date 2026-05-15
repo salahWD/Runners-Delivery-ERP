@@ -38,7 +38,7 @@ export default function CashboxTransactionDialog({ open, onOpenChange, date, typ
 
       // Use atomic cashbox update
       const { error: cashboxError } = await (supabase.rpc as any)('update_cashbox_atomic', {
-        p_date: date.from.toISOString().split('T')[0],
+        p_date: date?.from.toISOString().split('T')[0] || new Date().toISOString().split('T')[0],
         p_cash_in_usd: type === 'in' ? amountUsd : 0,
         p_cash_in_lbp: type === 'in' ? amountLbp : 0,
         p_cash_out_usd: type === 'out' ? amountUsd : 0,

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Plus, Minus, HandCoins, Receipt, History, Wallet, Calendar, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import CashboxConversionDialog from '@/components/cashbox/CashboxConversionDialog';
 import CashboxTransactionDialog from '@/components/cashbox/CashboxTransactionDialog';
 import GiveDriverCashDialog from '@/components/cashbox/GiveDriverCashDialog';
 import AddExpenseDialog from '@/components/cashbox/AddExpenseDialog';
@@ -24,6 +25,7 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuChe
 const Cashbox = () => {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [addCapitalOpen, setAddCapitalOpen] = useState(false);
+  const [convertCurrencyOpen, setConvertCurrencyOpen] = useState(false);
   const [withdrawCapitalOpen, setWithdrawCapitalOpen] = useState(false);
   const [giveDriverCashOpen, setGiveDriverCashOpen] = useState(false);
   const [addExpenseOpen, setAddExpenseOpen] = useState(false);
@@ -123,6 +125,10 @@ const Cashbox = () => {
 
           {/* Quick Actions */}
           <div className="flex flex-wrap gap-2">
+            <Button onClick={() => setConvertCurrencyOpen(true)} variant="default" size="sm">
+              <Plus className="mr-2 h-4 w-4" />
+              Convert Currency
+            </Button>
             <Button onClick={() => setAddCapitalOpen(true)} variant="default" size="sm">
               <Plus className="mr-2 h-4 w-4" />
               Add Capital
@@ -314,6 +320,12 @@ const Cashbox = () => {
       </div>
 
       {/* Dialogs */}
+      <CashboxConversionDialog
+        open={convertCurrencyOpen}
+        onOpenChange={setConvertCurrencyOpen}
+        USDCapital={cashbox?.closing_usd || 0}
+        LBPCapital={cashbox?.closing_lbp || 0}
+      />
       <CashboxTransactionDialog
         open={addCapitalOpen}
         onOpenChange={setAddCapitalOpen}

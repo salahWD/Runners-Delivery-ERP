@@ -595,6 +595,33 @@ export default function EditOrderDialog({ order, open, onOpenChange }: EditOrder
                         />
                       </div>
                     </div>
+                    {order.third_party_id !== null && order.fulfillment == "ThirdParty" && (
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="space-y-2">
+                          <Label>Third Pary Fee (USD)</Label>
+                          <Input
+                            type="number"
+                            step="1000"
+                            value={formData.third_party_fee_usd}
+                            onChange={(e) => {
+                              setFormData({ ...formData, third_party_fee_usd: e.target.value });
+                            }}
+                          />
+                        </div>
+                        {/* <div className="space-y-2">
+                        <Label>Due to Client (LBP)</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={formData.amount_due_to_client_lbp}
+                          readOnly
+                          className="bg-muted"
+                          title="Auto-calculated: Total - Delivery Fee"
+                        />
+                      </div> */}
+                      </div>
+                    )}
+
                   </>
                 ) : (
                   <>
