@@ -444,8 +444,8 @@ const InstantOrders = () => {
                   <TableHead className="w-[50px]"></TableHead>
                   <TableHead className="px-1">Client</TableHead>
                   <TableHead className="px-1">Address</TableHead>
-                  <TableHead className="px-1">Amount USD</TableHead>
-                  <TableHead className="px-1">Amount LBP</TableHead>
+                  <TableHead className="px-1">USD</TableHead>
+                  <TableHead className="px-1">LBP</TableHead>
                   <TableHead className="px-1">Fee USD</TableHead>
                   <TableHead className="px-1">Fee LBP</TableHead>
                   <TableHead className="px-1">Driver</TableHead>

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Check, ChevronsUpDown, Plus } from "lucide-react";
+import { Check, ChevronsUpDown, Plus, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -700,11 +700,35 @@ export function EcomOrderForm() {
     return isNaN(parseFloat(cleaned)) ? "0" : cleaned;
   };
 
+  const downloadTemplate = () => {
+    const workbook = XLSX.utils.book_new();
+    const templateData = [
+      {
+        "Order Ref": "12345",
+        "Client": "Nal",
+        "Customer": "Darine Sarkis",
+        "Mobile Number": "3839185",
+        "Delivery Address": "Hazmieh",
+        "Courier": "Hadi",
+        "Total Amount": "$0.00",
+        "Delivery Fee": "$12.00",
+        "Due": "$12.00"
+      }
+    ];
+    const worksheet = XLSX.utils.json_to_sheet(templateData);
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Ecom Orders Template');
+    XLSX.writeFile(workbook, 'Ecom_Orders_Template.xlsx');
+  };
+
   return (
     <div className="space-y-2">
       <div className="flex justify-between items-center">
         <h3 className="text-sm font-semibold">Quick E-commerce Entry</h3>
         <div className="flex items-center gap-2">
+          <Button onClick={downloadTemplate} size="sm" variant="outline" tabIndex={-1}>
+            <Download className="h-4 w-4 mr-1" />
+            Download Template
+          </Button>
           <div className="p-2 px-4 flex items-center gap-4 border-2 border-dashed border-gray-300 rounded-lg">
             <h3 className="text-md font-bold">Import Excel</h3>
             <input

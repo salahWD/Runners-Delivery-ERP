@@ -32,7 +32,7 @@ export function ClientStatementInlineDetail({ statement }: ClientStatementInline
     queryKey: ['client-statement-orders-inline', statement.id],
     queryFn: async () => {
       if (!statement.order_refs?.length) return [];
-      
+
       const { data, error } = await supabase
         .from('orders')
         .select(`*, customers(phone, name, address), drivers(name)`)
@@ -85,57 +85,44 @@ export function ClientStatementInlineDetail({ statement }: ClientStatementInline
 
   const generateWhatsAppText = () => {
     const clientName = statement.clients?.name || 'Client';
-    let text = `📋 *STATEMENT - ${clientName}*\n`;
-    text += `📅 Period: ${format(new Date(statement.period_from), 'MMM dd, yyyy')} - ${format(new Date(statement.period_to), 'MMM dd, yyyy')}\n`;
-    text += `━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+    const formatAmount = (usd: number, lbp: number) => {
+      const parts = [];
+      if (usd !== 0) parts.push(`$${usd.toFixed(2)}`);
+      if (lbp !== 0) parts.push(`${lbp.toLocaleString()} LL`);
+      return parts.length > 0 ? parts.join(' / ') : '-';
+    };
 
-    if (instantOrders.length > 0) {
-      text += `*INSTANT ORDERS (${instantOrders.length})*\n`;
-      text += `─────────────────────\n`;
-      instantOrders.forEach((order: any, idx: number) => {
+    const lines = [
+      `📋 *STATEMENT - ${clientName}*`,
+      `Period: ${format(new Date(statement.period_from), 'MMM dd, yyyy')} - ${format(new Date(statement.period_to), 'MMM dd, yyyy')}`,
+      ``,
+
+      // Instant Orders Section
+      instantOrders.length > 0 ? `*Instant Orders (${instantOrders.length}):*` : null,
+      ...instantOrders.map(order => {
         const due = calculateDue(order);
-        const orderUsd = Number(order.order_amount_usd || 0);
-        const orderLbp = Number(order.order_amount_lbp || 0);
-        const feeUsd = Number(order.delivery_fee_usd || 0);
-        const feeLbp = Number(order.delivery_fee_lbp || 0);
-        
-        text += `\n${idx + 1}. *${order.order_id}*\n`;
-        text += `   📅 ${format(new Date(order.created_at), 'MMM dd, yyyy')}\n`;
-        text += `   📍 ${order.address}\n`;
-        if (order.notes) text += `   📝 ${order.notes}\n`;
-        text += `   💰 Order: ${formatAmount(orderUsd, orderLbp)}\n`;
-        if (order.driver_paid_for_client) {
-          text += `   🚚 Delivery Fee: ${formatAmount(feeUsd, feeLbp)}\n`;
-        }
-        text += `   ✅ Due: *${formatAmount(due.usd, due.lbp)}*\n`;
-      });
-      text += `\n`;
-    }
+        return `• ${order.order_id} - Due: ${formatAmount(due.usd, due.lbp)}`;
+      }),
+      instantOrders.length > 0 ? `` : null,
 
-    if (ecomOrders.length > 0) {
-      text += `*E-COMMERCE ORDERS (${ecomOrders.length})*\n`;
-      text += `─────────────────────\n`;
-      ecomOrders.forEach((order: any, idx: number) => {
+      // E-Commerce Orders Section
+      ecomOrders.length > 0 ? `*E-Commerce Orders (${ecomOrders.length}):*` : null,
+      ...ecomOrders.map(order => {
         const due = calculateDue(order);
-        text += `\n${idx + 1}. *${order.voucher_no || order.order_id}*\n`;
-        text += `   👤 ${order.customers?.name || 'N/A'}\n`;
-        text += `   📞 ${order.customers?.phone || 'N/A'}\n`;
-        text += `   📍 ${order.address}\n`;
-        text += `   💵 Order: $${Number(order.order_amount_usd).toFixed(2)}\n`;
-        text += `   🚚 Delivery Fee: $${Number(order.delivery_fee_usd).toFixed(2)}\n`;
-        text += `   ✅ Due: *$${due.usd.toFixed(2)}*\n`;
-      });
-      text += `\n`;
-    }
+        const orderId = order.voucher_no || order.order_id;
+        return `• ${orderId} - Due: ${formatAmount(due.usd, due.lbp)}`;
+      }),
+      ecomOrders.length > 0 ? `` : null,
 
-    text += `━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-    text += `*SUMMARY*\n`;
-    text += `Total Orders: ${totals.totalOrders}\n`;
-    text += `Order Amount: ${formatAmount(totals.totalOrderAmountUsd, totals.totalOrderAmountLbp)}\n`;
-    text += `━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-    text += `*NET DUE: ${formatAmount(totals.totalDueToClientUsd, totals.totalDueToClientLbp)}*`;
+      // Summary Section
+      `*Summary:*`,
+      `Total Orders: ${totals.totalOrders}`,
+      `Order Amount: ${formatAmount(totals.totalOrderAmountUsd, totals.totalOrderAmountLbp)}`,
+      ``,
+      `💰 *Net Due: ${formatAmount(totals.totalDueToClientUsd, totals.totalDueToClientLbp)}*`
+    ].filter(val => val !== null && val !== undefined).join('\n');
 
-    return text;
+    return lines;
   };
 
   const copyToClipboard = async () => {
@@ -189,7 +176,7 @@ export function ClientStatementInlineDetail({ statement }: ClientStatementInline
                   const orderLbp = Number(order.order_amount_lbp || 0);
                   const feeUsd = Number(order.delivery_fee_usd || 0);
                   const feeLbp = Number(order.delivery_fee_lbp || 0);
-                  
+
                   return (
                     <TableRow key={order.id} className="text-xs">
                       <TableCell className="py-1.5">{format(new Date(order.created_at), 'MMM dd')}</TableCell>

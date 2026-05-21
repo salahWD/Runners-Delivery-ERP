@@ -873,7 +873,7 @@ export function ClientStatementsTab() {
       )}
 
       {/* Statement History */}
-      <Card className="border-sidebar-border">
+      <Card className="border-sidebar-border !mb-20">
         <CardHeader className="py-2 px-4">
           <CardTitle className="text-sm font-medium">Statement History</CardTitle>
         </CardHeader>

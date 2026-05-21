@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { PrepaidStatementDialog } from "./PrepaidStatementDialog";
 import { ManifestDialog } from "./ManifestDialog";
+import { PreviewDialog } from "./PreviewDialog";
 import { DeliveryAttemptDialog } from "./DeliveryAttemptDialog";
 
 interface BulkActionsBarProps {
@@ -34,6 +35,7 @@ export function BulkActionsBar({ selectedIds, onClearSelection, thirdPartyDisabl
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [prepaidDialogOpen, setPrepaidDialogOpen] = useState(false);
   const [manifestDialogOpen, setManifestDialogOpen] = useState(false);
+  const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
   const [attemptDialogOpen, setAttemptDialogOpen] = useState(false);
 
   const { data: drivers = [] } = useQuery({
@@ -421,6 +423,11 @@ export function BulkActionsBar({ selectedIds, onClearSelection, thirdPartyDisabl
           </PopoverContent>
         </Popover>
 
+        <Button size="sm" variant="secondary" onClick={() => setPreviewDialogOpen(true)}>
+          <FileText className="h-4 w-4 mr-2" />
+          Preview
+        </Button>
+
         <Button size="sm" variant="secondary" onClick={() => setManifestDialogOpen(true)}>
           <FileText className="h-4 w-4 mr-2" />
           Create Manifest
@@ -469,6 +476,12 @@ export function BulkActionsBar({ selectedIds, onClearSelection, thirdPartyDisabl
         onOpenChange={setManifestDialogOpen}
         selectedOrderIds={selectedIds}
         onSuccess={onClearSelection}
+      />
+
+      <PreviewDialog
+        open={previewDialogOpen}
+        onOpenChange={setPreviewDialogOpen}
+        selectedOrderIds={selectedIds}
       />
     </>
   );

@@ -68,6 +68,7 @@ export function DriverStatementsTab() {
         .select('*')
         .eq('driver_id', selectedDriver)
         .is('statement_id', null)
+        .is('order_ref', null)
         .order('ts', { ascending: false });
 
       if (error) throw error;
@@ -216,6 +217,10 @@ export function DriverStatementsTab() {
   // If negative, we owe the driver money (cash out from cashbox)
   const netDueUsd = totals.totalCollectedUsd - totals.totalDriverPaidUsd;
   const netDueLbp = totals.totalCollectedLbp - totals.totalDriverPaidLbp;
+  let netDueUsdWithTransactions = netDueUsd;
+  let netDueLbpWithTransactions = netDueLbp;
+  let totalPaidToDriverUsd = 0;
+  let totalPaidToDriverLbp = 0;
 
   const statementPeriodLabel = `${format(new Date(dateFrom), 'MMM dd, yyyy')} - ${format(new Date(dateTo), 'MMM dd, yyyy')}`;
 
@@ -377,8 +382,8 @@ export function DriverStatementsTab() {
         total_delivery_fees_lbp: 0,
         total_driver_paid_refund_usd: totals.totalDriverPaidUsd,
         total_driver_paid_refund_lbp: totals.totalDriverPaidLbp,
-        net_due_usd: netDueUsd,
-        net_due_lbp: netDueLbp,
+        net_due_usd: netDueUsdWithTransactions,
+        net_due_lbp: netDueLbpWithTransactions,// use netDueUsdWithTransactions
         order_refs: orderRefs,
         // status: 'paid',
         status: 'unpaid',
@@ -448,11 +453,6 @@ export function DriverStatementsTab() {
             }).in('id', orderIds);
 
 
-            // const totals = calculateTotals(orders);
-            // Net due FROM driver = what driver collected MINUS what we owe driver (refunds)
-            // If negative, we owe the driver money (cash out from cashbox)
-            // const netDueUsd = totals.totalCollectedUsd - totals.totalDriverPaidUsd;
-            // const netDueLbp = totals.totalCollectedLbp - totals.totalDriverPaidLbp;
             const netDueUsd = amountUsd;
             const netDueLbp = amountLbp;
 
@@ -835,7 +835,7 @@ export function DriverStatementsTab() {
       )}
 
       {/* Statement History */}
-      <Card className="border-sidebar-border">
+      <Card className="border-sidebar-border !mb-20">
         <CardHeader className="py-2 px-4">
           <CardTitle className="text-sm font-medium">Statement History</CardTitle>
         </CardHeader>
@@ -1112,53 +1112,70 @@ export function DriverStatementsTab() {
               </div>
 
               {/* statments Table */}
-              <h4 className='text-sm mb-0'>Unassigned Transactions</h4>
-              <div className="border rounded-lg overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="text-xs bg-muted/50">
-                      <TableHead className="py-2">Date</TableHead>
-                      <TableHead className="py-2">Type</TableHead>
-                      <TableHead className="py-2">Order Ref</TableHead>
-                      <TableHead className="py-2 text-right">Amount USD</TableHead>
-                      <TableHead className="py-2 text-right">Amount LBP</TableHead>
-                      <TableHead className="py-2">Note</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {unassignedTransactionsLoading ? (
-                      <TableRow>
-                        <TableCell colSpan={6} className="py-6 text-center text-sm text-muted-foreground">
-                          Loading transactions...
-                        </TableCell>
-                      </TableRow>
-                    ) : unassignedDriverTransactions?.length ? (
-                      unassignedDriverTransactions.map((transaction) => (
-                        <TableRow key={transaction.id} className="text-xs">
-                          <TableCell className="py-1.5 text-muted-foreground">
-                            {transaction.ts ? format(new Date(transaction.ts), 'MMM dd, yyyy') : '-'}
-                          </TableCell>
-                          <TableCell className="py-1.5">{transaction.type}</TableCell>
-                          <TableCell className="py-1.5 font-mono">{transaction.order_ref || '-'}</TableCell>
-                          <TableCell className="py-1.5 font-mono text-right">
-                            {transaction.amount_usd != null ? `$${Number(transaction.amount_usd).toFixed(2)}` : '-'}
-                          </TableCell>
-                          <TableCell className="py-1.5 font-mono text-right">
-                            {transaction.amount_lbp != null ? `${Number(transaction.amount_lbp).toLocaleString()} LL` : '-'}
-                          </TableCell>
-                          <TableCell className="py-1.5">{transaction.note || '-'}</TableCell>
+              {unassignedDriverTransactions && (
+                <>
+                  <h4 className='text-sm mb-0'>Unassigned Transactions</h4>
+                  <div className="border rounded-lg overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="text-xs bg-muted/50">
+                          <TableHead className="py-2">Date</TableHead>
+                          <TableHead className="py-2">Type</TableHead>
+                          <TableHead className="py-2">Order Ref</TableHead>
+                          <TableHead className="py-2 text-right">Amount USD</TableHead>
+                          <TableHead className="py-2 text-right">Amount LBP</TableHead>
+                          <TableHead className="py-2">Note</TableHead>
                         </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={6} className="py-6 text-center text-sm text-muted-foreground">
-                          No unassigned driver transactions found.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
+                      </TableHeader>
+                      <TableBody>
+                        {unassignedTransactionsLoading ? (
+                          <TableRow>
+                            <TableCell colSpan={6} className="py-6 text-center text-sm text-muted-foreground">
+                              Loading transactions...
+                            </TableCell>
+                          </TableRow>
+                        ) : unassignedDriverTransactions?.length ? (
+                          unassignedDriverTransactions.map((transaction) => {
+                            if (transaction.type == "Credit") {
+                              netDueUsdWithTransactions = Number(netDueUsd || 0) + Number(transaction.amount_usd || 0);
+                              netDueLbpWithTransactions = Number(netDueLbp || 0) + Number(transaction.amount_lbp || 0);
+                              totalPaidToDriverUsd += Number(transaction.amount_usd || 0);
+                              totalPaidToDriverLbp += Number(transaction.amount_lbp || 0);
+                            } else {
+                              netDueUsdWithTransactions = Number(netDueUsd || 0) - Number(transaction.amount_usd || 0);
+                              netDueLbpWithTransactions = Number(netDueLbp || 0) - Number(transaction.amount_lbp || 0);
+                              totalPaidToDriverUsd -= Number(transaction.amount_usd || 0);
+                              totalPaidToDriverLbp -= Number(transaction.amount_lbp || 0);
+                            }
+                            return (
+                              <TableRow key={transaction.id} className="text-xs">
+                                <TableCell className="py-1.5 text-muted-foreground">
+                                  {transaction.ts ? format(new Date(transaction.ts), 'MMM dd, yyyy') : '-'}
+                                </TableCell>
+                                <TableCell className="py-1.5">{transaction.type == "Credit" ? "took money" : "payed money"}</TableCell>
+                                <TableCell className="py-1.5 font-mono">{transaction.order_ref || '-'}</TableCell>
+                                <TableCell className="py-1.5 font-mono text-right">
+                                  {transaction.amount_usd != null ? `$${Number(transaction.amount_usd).toFixed(2)}` : '-'}
+                                </TableCell>
+                                <TableCell className="py-1.5 font-mono text-right">
+                                  {transaction.amount_lbp != null ? `${Number(transaction.amount_lbp).toLocaleString()} LL` : '-'}
+                                </TableCell>
+                                <TableCell className="py-1.5">{transaction.note || '-'}</TableCell>
+                              </TableRow>
+                            )
+                          })
+                        ) : (
+                          <TableRow>
+                            <TableCell colSpan={6} className="py-6 text-center text-sm text-muted-foreground">
+                              No unassigned driver transactions found.
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
+              )}
 
               {/* Summary */}
               <div className="bg-muted/30 rounded-lg p-4 space-y-2">
@@ -1169,6 +1186,15 @@ export function DriverStatementsTab() {
                     {totals.totalCollectedLbp > 0 && <span className="text-muted-foreground ml-1">/ {totals.totalCollectedLbp.toLocaleString()} LL</span>}
                   </span>
                 </div>
+                {unassignedDriverTransactions && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Total Paid To Driver:</span>
+                    <span className={`font-mono font-semibold ${totalPaidToDriverUsd > 0 ? 'text-destructive' : ''}`}>
+                      ${totalPaidToDriverUsd.toFixed(2)}
+                      {totalPaidToDriverLbp !== 0 && <span className="text-muted-foreground ml-1">/ {totalPaidToDriverLbp.toLocaleString()} LL</span>}
+                    </span>
+                  </div>
+                )}
                 {(totals.totalDriverPaidUsd > 0 || totals.totalDriverPaidLbp > 0) && (
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Driver Paid (Refund to Driver):</span>
@@ -1179,10 +1205,10 @@ export function DriverStatementsTab() {
                   </div>
                 )}
                 <div className="border-t pt-2 flex justify-between text-base font-bold">
-                  <span>{netDueUsd >= 0 ? 'Net Due to Company:' : 'Net Refund to Driver:'}</span>
-                  <span className={`font-mono ${netDueUsd < 0 ? 'text-destructive' : ''}`}>
-                    ${netDueUsd.toFixed(2)}
-                    {netDueLbp !== 0 && <span className="ml-1">/ {netDueLbp.toLocaleString()} LL</span>}
+                  <span>{netDueUsdWithTransactions >= 0 ? 'Net Due to Company:' : 'Net Refund to Driver:'}</span>
+                  <span className={`font-mono ${netDueUsdWithTransactions < 0 ? 'text-destructive' : ''}`}>
+                    ${netDueUsdWithTransactions.toFixed(2)}
+                    {netDueLbpWithTransactions !== 0 && <span className="ml-1">/ {netDueLbpWithTransactions.toLocaleString()} LL</span>}
                   </span>
                 </div>
               </div>

@@ -64,42 +64,38 @@ export function DriverStatementInlineDetail({ statement }: DriverStatementInline
 
   const generateWhatsAppText = () => {
     const driverName = statement.drivers?.name || 'Driver';
-    let text = `📋 *DRIVER STATEMENT - ${driverName}*\n`;
-    text += `📅 Period: ${format(new Date(statement.period_from), 'MMM dd, yyyy')} - ${format(new Date(statement.period_to), 'MMM dd, yyyy')}\n`;
-    text += `━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+    const formatAmount = (usd: number, lbp: number) => {
+      const parts = [];
+      if (usd !== 0) parts.push(`$${usd.toFixed(2)}`);
+      if (lbp !== 0) parts.push(`${lbp.toLocaleString()} LL`);
+      return parts.length > 0 ? parts.join(' / ') : '-';
+    };
 
-    text += `*ORDERS (${orders?.length || 0})*\n`;
-    text += `─────────────────────\n`;
+    const lines = [
+      `📋 *Driver Statement*`,
+      `Driver: ${driverName}`,
+      `Period: ${format(new Date(statement.period_from), 'MMM dd, yyyy')} - ${format(new Date(statement.period_to), 'MMM dd, yyyy')}`,
+      ``,
+      `*Orders (${orders.length}):*`,
+      ...orders.map(order => {
+        const isDriverPaid = order.driver_paid_for_client === true;
+        const orderRef = order.order_type === 'ecom' ? (order.voucher_no || order.order_id) : order.order_id;
 
-    orders?.forEach((order: any, idx: number) => {
-      const collectedUsd = Number(order.collected_amount_usd || 0);
-      const collectedLbp = Number(order.collected_amount_lbp || 0);
-      const feeUsd = Number(order.delivery_fee_usd || 0);
-      const feeLbp = Number(order.delivery_fee_lbp || 0);
-      const driverPaidUsd = Number(order.driver_paid_amount_usd || 0);
-      const driverPaidLbp = Number(order.driver_paid_amount_lbp || 0);
+        if (isDriverPaid) {
+          return `• ${orderRef} - Paid: ${formatAmount(Number(order.driver_paid_amount_usd || 0), Number(order.driver_paid_amount_lbp || 0))} (Refund)`;
+        }
+        return `• ${orderRef} - Collected: ${formatAmount(Number(order.collected_amount_usd || 0), Number(order.collected_amount_lbp || 0))}`;
+      }),
+      ``,
+      `*Summary:*`,
+      `Total Collected: ${formatAmount(totals.totalCollectedUsd, totals.totalCollectedLbp)}`,
+      `Delivery Fees: ${formatAmount(totals.totalDeliveryFeesUsd, totals.totalDeliveryFeesLbp)}`,
+      (totals.totalDriverPaidUsd > 0 || totals.totalDriverPaidLbp > 0) ? `Refund to Driver: -${formatAmount(totals.totalDriverPaidUsd, totals.totalDriverPaidLbp)}` : null,
+      ``,
+      `💰 *Net Due: ${formatAmount(netDueUsd, netDueLbp)}*`
+    ].filter(val => val !== null && val !== undefined).join('\n');
 
-      const orderRef = order.order_type === 'ecom' ? (order.voucher_no || order.order_id) : order.order_id;
-
-      text += `\n${idx + 1}. *${orderRef}*\n`;
-      text += `   📅 ${order.delivered_at ? format(new Date(order.delivered_at), 'MMM dd, yyyy') : 'N/A'}\n`;
-      text += `   🏪 ${order.clients?.name || 'N/A'}\n`;
-      text += `   💰 Collected: ${formatAmount(collectedUsd, collectedLbp)}\n`;
-      text += `   🚚 Fee: ${formatAmount(feeUsd, feeLbp)}\n`;
-      if (order.driver_paid_for_client) {
-        text += `   💳 Driver Paid: ${formatAmount(driverPaidUsd, driverPaidLbp)}\n`;
-      }
-    });
-
-    text += `\n━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-    text += `*SUMMARY*\n`;
-    text += `Total Collected: ${formatAmount(totals.totalCollectedUsd, totals.totalCollectedLbp)}\n`;
-    text += `Delivery Fees: ${formatAmount(totals.totalDeliveryFeesUsd, totals.totalDeliveryFeesLbp)}\n`;
-    text += `Driver Paid Refund: ${formatAmount(totals.totalDriverPaidUsd, totals.totalDriverPaidLbp)}\n`;
-    text += `━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-    text += `*NET DUE: ${formatAmount(netDueUsd, netDueLbp)}*`;
-
-    return text;
+    return lines;
   };
 
   const copyToClipboard = async () => {

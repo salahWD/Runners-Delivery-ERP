@@ -11,5 +11,5 @@ export function formatUSD(amount: number | null | undefined): string {
 }
 
 export function formatLBP(amount: number | null | undefined): string {
-  return `${(amount || 0).toLocaleString('en-US')} LBP`;
+  return `${(amount || 0).toLocaleString('en-US')}`;
 }

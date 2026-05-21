@@ -43,3 +43,35 @@ Role-Based Permissions: Restrict specific actions like accounting deletions and 
 Branding: Implement logo and branding integration throughout the platform.❓
 
 Bulk Filter Fix: Fix the inability to filter orders by assigned/unassigned driver names for bulk actions. ❓
+
+
+
+-------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------
+
+- الطلبات المحذوفة يجب استبدالها بتنزيل طلب معاكس (يعني موجب او سالب عكس الطلب السابق) حتى يبقى الطلب السابق ويتم اصلاح القيمة الاجمالية
+
+-------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------
+
+- add ecom template excel importe ✅
+- خصم الدفعات (transactions) الغير مربوطة برقم طلبية من اجمالي الstatment قبل عملها ✅
+- تعديل طريقة نسخ الstatement للdriver & client في الواتساب واضافة زر export PDF و excel ✅
+- اضافة مساحة فارغة (padding or margin) في اخر صفحة الdrivers ✅
+
+2.	Chart of accounts Accounting, zekir 2rjaytak keef bishtighil 3al sheet il accounting kil shakhes 2ilo hseb, Chart of accounts, daily journal, trial balance, income statement, balance sheet, cash flow, 2isit ilexpense category btoo2a3 dimna, ye3ni nihna ekhir shee kina 7ekyeen mnkhales kil shee wmn7kee bilaccounting wilreports
+
+4.	Monthly Reporting, n2idar generates reports based on sales clients drivers etc, with date range order types etc
+
+5.	Role Based permissions, ye3ni admin yi2dar ye3mil kil shee, accountant bss 2isas muhasbeh, preview only masalan gust, Operator tidkheel ti3deel orders, ye3ni kil wehid hasab shoo ilrole taba3ooo bkoon 3indo authorization, 7kina feeyon bwa2ta bss bidna n7aded il2moor
+
+1.	Driver Statement format before and after issuing statement are different when copied for WhatsApp, try it! I want the format that is copied for WhatsApp to be the same after statement is issued. Lines Not big text.
+
+6.	Branding, mashee shee baseet nhot il logo taba3 ilshirkeh 3al login page w3al system min juwa 
+
+8.	Format taba3 clients statement 3al export kil order nus saf7a tafaseel bida tkoon bil3ard mush biltool
+
+- Monthly Reporting
+- chart of accounts
+- role based permissions
+
