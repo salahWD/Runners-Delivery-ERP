@@ -765,10 +765,11 @@ export function InstantOrderForm() {
       {
         "Client Name": "Example Client",
         "Delivery Address": "123 Main Street, City",
-        "Amount USD": "10.00",
+        "Driver": "Mustafa 1",
         "Amount LBP": "15000",
-        "Fee USD": "2.00",
+        "Amount USD": "10.00",
         "Fee LBP": "3000",
+        "Fee USD": "2.00",
         "Notes": "Sample order notes",
         "Driver Paid": "No",
         "Company Paid": "No"

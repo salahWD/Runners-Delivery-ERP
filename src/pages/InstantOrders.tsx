@@ -444,10 +444,10 @@ const InstantOrders = () => {
                   <TableHead className="w-[50px]"></TableHead>
                   <TableHead className="px-1">Client</TableHead>
                   <TableHead className="px-1">Address</TableHead>
-                  <TableHead className="px-1">USD</TableHead>
                   <TableHead className="px-1">LBP</TableHead>
-                  <TableHead className="px-1">Fee USD</TableHead>
+                  <TableHead className="px-1">USD</TableHead>
                   <TableHead className="px-1">Fee LBP</TableHead>
+                  <TableHead className="px-1">Fee USD</TableHead>
                   <TableHead className="px-1">Driver</TableHead>
                   <TableHead className="px-1">Notes</TableHead>
                   <TableHead className="px-1">Order Status</TableHead>
@@ -468,20 +468,20 @@ const InstantOrders = () => {
                       <TableCell className="px-1 max-w-[200px] truncate">{order.address}</TableCell>
                       <TableCell className="px-1 font-mono">
                         {order.driver_paid_for_client ? (
-                          <span className="text-red-600">{formatUSD(order.driver_paid_amount_usd || order.order_amount_usd)}</span>
-                        ) : (
-                          formatUSD(order.order_amount_usd)
-                        )}
-                      </TableCell>
-                      <TableCell className="px-1 font-mono">
-                        {order.driver_paid_for_client ? (
                           <span className="text-red-600">{formatLBP(order.driver_paid_amount_lbp || order.order_amount_lbp)}</span>
                         ) : (
                           formatLBP(order.order_amount_lbp)
                         )}
                       </TableCell>
-                      <TableCell className="px-1 font-mono">{formatUSD(order.delivery_fee_usd)}</TableCell>
+                      <TableCell className="px-1 font-mono">
+                        {order.driver_paid_for_client ? (
+                          <span className="text-red-600">{formatUSD(order.driver_paid_amount_usd || order.order_amount_usd)}</span>
+                        ) : (
+                          formatUSD(order.order_amount_usd)
+                        )}
+                      </TableCell>
                       <TableCell className="px-1 font-mono">{formatLBP(order.delivery_fee_lbp)}</TableCell>
+                      <TableCell className="px-1 font-mono">{formatUSD(order.delivery_fee_usd)}</TableCell>
                       <TableCell className="px-1">{order.drivers?.name || "-"}</TableCell>
                       <TableCell className="px-1 max-w-[150px] truncate">{order.notes || "-"}</TableCell>
                       <TableCell className="px-1">{getStatusBadge(order.status)}</TableCell>
