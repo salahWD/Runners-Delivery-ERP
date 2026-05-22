@@ -290,7 +290,7 @@ const EcomOrders = () => {
                   <TableHead className="px-1">Address</TableHead>
                   <TableHead className="px-1">Total</TableHead>
                   <TableHead className="px-1">Fee</TableHead>
-                  <TableHead className="px-1">Due</TableHead>
+                  {/* <TableHead className="px-1">Due</TableHead> */}
                   <TableHead className="px-1">Payment Type</TableHead>
                   <TableHead className="px-1">Delivery</TableHead>
                   <TableHead className="px-1">Status</TableHead>
@@ -319,7 +319,7 @@ const EcomOrders = () => {
                     <TableCell className="px-1 max-w-[200px] truncate">{order.address}</TableCell>
                     <TableCell className="px-1">${(Number(order.order_amount_usd) + Number(order.delivery_fee_usd)).toFixed(2)}</TableCell>
                     <TableCell className="px-1">${Number(order.delivery_fee_usd).toFixed(2)}</TableCell>
-                    <TableCell className="px-1">${Number(order.amount_due_to_client_usd).toFixed(2)}</TableCell>
+                    {/* <TableCell className="px-1">${Number(order.amount_due_to_client_usd).toFixed(2)}</TableCell> */}
                     <TableCell className="px-1">
                       {order.prepaid_by_company ? (
                         // Cash-based order that was prepaid

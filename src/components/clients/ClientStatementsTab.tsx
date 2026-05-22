@@ -223,33 +223,21 @@ export function ClientStatementsTab() {
       let dueToClientLbp = 0;
       const companyPaid = order.company_paid_for_order || order.prepaid_by_company || order.prepaid_by_runners;
 
-      if (order.order_type === 'instant') {
-        if (order.driver_paid_for_client || companyPaid) {
-          console.log("case 1")
-          dueToClientUsd = -1 * (Number(order.order_amount_usd || 0) + Number(order.delivery_fee_usd || 0));
-          dueToClientLbp = -1 * (Number(order.order_amount_lbp || 0) + Number(order.delivery_fee_lbp || 0));
-        } else {
-          console.log("case 2")
-          dueToClientUsd = Number(order.order_amount_usd || 0);
-          dueToClientLbp = Number(order.order_amount_lbp || 0);
-        }
-        console.log("instant order: ", order, dueToClientUsd, dueToClientLbp);
+      if (order.driver_paid_for_client || companyPaid) {
+        console.log("case 1")
+        dueToClientUsd = -1 * (Number(order.order_amount_usd || 0) + Number(order.delivery_fee_usd || 0));
+        dueToClientLbp = -1 * (Number(order.order_amount_lbp || 0) + Number(order.delivery_fee_lbp || 0));
       } else {
-        if (order.driver_paid_for_client || companyPaid) {
-          console.log("case 3")
-          dueToClientUsd = -1 * (Number(order.order_amount_usd || 0) + Number(order.delivery_fee_usd || 0));
-          dueToClientLbp = -1 * (Number(order.order_amount_lbp || 0) + Number(order.delivery_fee_lbp || 0));
-        } else {
-          console.log("case 4")
-          dueToClientUsd = Number(order.order_amount_usd || 0) + Number(order.delivery_fee_usd || 0);
-          dueToClientLbp = Number(order.order_amount_lbp || 0) + Number(order.delivery_fee_lbp || 0);
-        }
+        console.log("case 2")
+        dueToClientUsd = Number(order.order_amount_usd || 0);
+        dueToClientLbp = Number(order.order_amount_lbp || 0);
       }
+      console.log("instant order: ", order, dueToClientUsd, dueToClientLbp);
 
       return {
         totalOrders: acc.totalOrders + 1,
-        totalOrderAmountUsd: acc.totalOrderAmountUsd + Number(order.order_amount_usd || 0),
-        totalOrderAmountLbp: acc.totalOrderAmountLbp + Number(order.order_amount_lbp || 0),
+        totalOrderAmountUsd: acc.totalOrderAmountUsd + Number(order.order_amount_usd || 0) + Number(order.delivery_fee_usd || 0),
+        totalOrderAmountLbp: acc.totalOrderAmountLbp + Number(order.order_amount_lbp || 0) + Number(order.delivery_fee_lbp || 0),
         totalDeliveryFeesUsd: acc.totalDeliveryFeesUsd + Number(order.delivery_fee_usd || 0),
         totalDeliveryFeesLbp: acc.totalDeliveryFeesLbp + Number(order.delivery_fee_lbp || 0),
         totalDueToClientUsd: acc.totalDueToClientUsd + dueToClientUsd,
@@ -772,30 +760,14 @@ export function ClientStatementsTab() {
                           <TableHead className="py-2 text-center">Driver Paid</TableHead>
                           <TableHead className="py-2 text-center">Notes</TableHead>
                           <TableHead className="py-2 text-right">Fee</TableHead>
-                          <TableHead className="py-2 text-right">Due</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {filteredOrders.map((order) => {
-                          let dueToClientUsd = 0;
-                          let dueToClientLbp = 0;
-                          const orderAmountUsd = Number(order.order_amount_usd || 0);
-                          const orderAmountLpb = Number(order.order_amount_lbp || 0);
+                          const orderAmountUsd = Number(order.order_amount_usd || 0) + Number(order.delivery_fee_usd || 0);
+                          const orderAmountLpb = Number(order.order_amount_lbp || 0) + Number(order.delivery_fee_lbp || 0);
                           const feeUsd = Number(order.delivery_fee_usd || 0);
                           const feeLpb = Number(order.delivery_fee_lbp || 0);
-
-                          if (order.order_type === 'instant') {
-                            if (order.driver_paid_for_client || order.prepaid_by_company || order.prepaid_by_runners || order.company_paid_for_order) {
-                              dueToClientUsd = -1 * (orderAmountUsd + feeUsd);
-                              dueToClientLbp = -1 * (orderAmountLpb + feeLpb);
-                            } else {
-                              dueToClientUsd = orderAmountUsd;
-                              dueToClientLbp = orderAmountLpb;
-                            }
-                          } else {
-                            dueToClientUsd = Number(order.amount_due_to_client_usd || 0);
-                            dueToClientLbp = Number(order.amount_due_to_client_lbp || 0);
-                          }
 
                           return (
                             <TableRow key={order.id} className="h-8 text-xs">
@@ -826,10 +798,7 @@ export function ClientStatementsTab() {
                                 {order.notes}
                               </TableCell>
                               <TableCell className="py-1 text-right font-mono">
-                                {order.driver_paid_for_client ? `$${feeUsd.toFixed(2) + " / " + feeLpb + " LL"}` : '-'}
-                              </TableCell>
-                              <TableCell className="py-1 text-right font-mono font-semibold">
-                                ${dueToClientUsd.toFixed(2)} / {dueToClientLbp} LL
+                                ${feeUsd.toFixed(2) + " / " + feeLpb + " LL"}
                               </TableCell>
                             </TableRow>
                           );

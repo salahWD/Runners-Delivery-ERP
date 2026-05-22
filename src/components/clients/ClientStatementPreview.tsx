@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import autoTable from 'jspdf-autotable';
 import { Badge } from '@/components/ui/badge';
 import { Copy, FileText, X } from 'lucide-react';
 import { format } from 'date-fns';
@@ -154,110 +155,183 @@ export function ClientStatementPreview({
     const doc = new jsPDF({ unit: 'pt', format: 'a4' });
     const margin = 40;
     const pageWidth = doc.internal.pageSize.getWidth();
-    const lineHeight = 18;
     let y = margin;
 
-    doc.setFillColor('#1d4ed8');
-    doc.rect(margin, y, 120, 40, 'F');
-    doc.setTextColor('#ffffff');
-    doc.setFontSize(14);
-    doc.text('RUNNERS', margin + 10, y + 18);
-    doc.setFontSize(10);
-    doc.text('ERP', margin + 10, y + 34);
+    // ==========================================
+    // 1. HEADER SECTION (Clean & Modern Layout)
+    // ==========================================
 
-    doc.setTextColor('#111827');
-    doc.setFontSize(20);
-    doc.text('Statement', margin + 150, y + 22);
-    doc.setFontSize(10);
-    doc.text(`Client: ${clientName}`, margin + 150, y + 40);
-    doc.text(`Period: ${statementPeriodLabel}`, margin + 150, y + 56);
+    // Left: Brand Identification
+    doc.setFont('Helvetica', 'bold').setFontSize(16);
+    doc.setTextColor('#0f172a'); // Slate 900
+    doc.text('RUNNERS FMCG', margin, y + 15);
 
-    y += 80;
+    doc.setFont('Helvetica', 'normal').setFontSize(9);
+    doc.setTextColor('#64748b'); // Slate 500
+    doc.text('Distribution Management System', margin, y + 28);
 
-    const addWrappedText = (text: string, indent = 0, options: { bold?: boolean } = {}) => {
-      if (y > 760) {
-        doc.addPage();
-        y = margin;
+    // Right: Document Title / Status Meta
+    doc.setFont('Helvetica', 'bold').setFontSize(18);
+    doc.setTextColor('#1e40af'); // Classic Corporate Blue
+    doc.text('STATEMENT PREVIEW', pageWidth - margin, y + 15, { align: 'right' });
+
+    doc.setFont('Helvetica', 'bold').setFontSize(10);
+    doc.setTextColor('#ef4444'); // Red alert badge color for draft status
+    doc.text('DRAFT REPORT', pageWidth - margin, y + 28, { align: 'right' });
+
+    y += 55;
+
+    // Divider Line
+    doc.setDrawColor('#e2e8f0').setLineWidth(1).line(margin, y, pageWidth - margin, y);
+    y += 20;
+
+    // ==========================================
+    // 2. ORDER DETAILS / METADATA METRICS BLOCK
+    // ==========================================
+    doc.setFillColor('#f8fafc'); // Very light grey/blue background panel
+    doc.rect(margin, y, pageWidth - (margin * 2), 55, 'F');
+
+    doc.setFont('Helvetica', 'bold').setFontSize(9);
+    doc.setTextColor('#475569');
+    doc.text('METADATA DETAILS', margin + 15, y + 18);
+
+    // Dynamic Data Rows inside Panel
+    doc.setFont('Helvetica', 'normal').setFontSize(9);
+    doc.setTextColor('#0f172a');
+    doc.text(`Client(s): ${clientName || 'N/A'}`, margin + 15, y + 34);
+    doc.text(`Statement Period: ${statementPeriodLabel || 'All Time'}`, margin + 15, y + 46);
+
+    doc.text(`Generated Date: ${format(new Date(), 'MM/dd/yyyy')}`, pageWidth - margin - 15, y + 18, { align: 'right' });
+    doc.text(`Currency: USD / LBP`, pageWidth - margin - 15, y + 34, { align: 'right' });
+    doc.text(`Total Records: ${totals.totalOrders} Orders`, pageWidth - margin - 15, y + 46, { align: 'right' });
+
+    y += 75;
+
+    // ==========================================
+    // 3. MAIN DATA TABLE (Replacing messy lists)
+    // ==========================================
+    const allOrders = [...instantOrders, ...ecomOrders];
+
+    // Map your customized fields directly into visual structural rows
+    const tableRows = allOrders.map((order, index) => {
+      // const due = calculateDue(order);
+      const orderIdentifier = order.order_type === 'ecom'
+        ? (order.voucher_no || order.order_id)
+        : order.order_id;
+
+      // Compile dynamic, descriptive summary strings per cell row
+      // const entityDetails = order.order_type === 'ecom'
+      //   ? `Cust: ${order.customers?.name || '-'}\nPh: ${order.customers?.phone || '-'}`
+      //   : `Instant Fleet Order\nPaid to Driver: ${order.driver_paid_for_client ? 'Yes' : 'No'}`;
+
+      return [
+        orderIdentifier || String(index + 1),
+        formatDateLabel(order.created_at),
+        order.customers?.name || "-",
+        order.customers?.phone || "-",
+        order.address || '-',
+        formatAmount(Number(order.order_amount_usd || 0), Number(order.order_amount_lbp || 0)),
+        formatAmount(Number(order.delivery_fee_usd || 0), Number(order.delivery_fee_lbp || 0)),
+        // `Amt: ${formatAmount(Number(order.order_amount_usd || 0), Number(order.order_amount_lbp || 0))}\nFee: ${formatAmount(Number(order.delivery_fee_usd || 0), Number(order.delivery_fee_lbp || 0))}`,
+        // formatAmount(due.usd, due.lbp)
+      ];
+    });
+
+    autoTable(doc, {
+      startY: y,
+      margin: { left: margin, right: margin },
+      head: [['ID', 'DATE', 'CONTACT', 'PHONE', 'DELIVERY ADDRESS', 'AMOUNT', 'FEE'/* , 'TOTAL DUE' */]],
+      body: tableRows,
+      theme: 'striped',
+      headStyles: {
+        fillColor: '#1e40af', // Blue standard theme from your reference requirement
+        textColor: '#ffffff',
+        fontSize: 8,
+        fontStyle: 'bold',
+        halign: 'left',
+      },
+      bodyStyles: {
+        fontSize: 8,
+        textColor: '#334155',
+        cellPadding: 6,
+      },
+      columnStyles: {
+        0: { cellWidth: 40 },  // ID
+        1: { cellWidth: 75 },  // Date
+        2: { cellWidth: 75 },  // Contact
+        3: { cellWidth: 65 }, // phone
+        4: { cellWidth: 100 }, // Address
+        5: { cellWidth: 80 }, // amount
+        6: { cellWidth: 80 }, // fee
+        // 6: { cellWidth: 70, fontStyle: 'bold', halign: 'right' }  // Balance Line items
+      },
+      styles: {
+        overflow: 'linebreak',
+      },
+      didDrawPage: (data) => {
+        // Dynamic y alignment sync updates if multiple page height calculations jump
+        y = data.cursor ? data.cursor.y : y;
       }
-      if (options.bold) {
-        doc.setFont(undefined, 'bold');
-      } else {
-        doc.setFont(undefined, 'normal');
-      }
-      const lines = doc.splitTextToSize(text, pageWidth - margin * 2 - indent);
-      lines.forEach((line) => {
-        doc.text(line, margin + indent, y);
-        y += lineHeight;
-      });
-    };
+    });
 
-    const addSectionHeader = (title: string) => {
-      if (y > 700) {
-        doc.addPage();
-        y = margin;
-      }
-      doc.setFont(undefined, 'bold');
-      doc.setFontSize(12);
-      doc.text(title, margin, y);
-      y += lineHeight;
-      doc.setFontSize(10);
-    };
+    // Get final Y position after the automatic table renders to draw summary
+    const finalY = (doc as any).lastAutoTable.finalY || y;
+    y = finalY + 25;
 
-    if (instantOrders.length > 0) {
-      addSectionHeader(`Instant / Errand Orders (${instantOrders.length})`);
-      instantOrders.forEach((order, index) => {
-        const due = calculateDue(order);
-        addWrappedText(`${index + 1}. ${order.order_id} (${formatDateLabel(order.created_at)})`, 0, { bold: true });
-        addWrappedText(`Address: ${order.address}`, 10);
-        addWrappedText(`Amount: ${formatAmount(Number(order.order_amount_usd || 0), Number(order.order_amount_lbp || 0))}`, 10);
-        if (order.driver_paid_for_client) {
-          addWrappedText(`Driver Paid: Yes`, 10);
-          addWrappedText(`Fee: ${formatAmount(Number(order.delivery_fee_usd || 0), Number(order.delivery_fee_lbp || 0))}`, 10);
-        }
-        if (order.notes) {
-          addWrappedText(`Notes: ${order.notes}`, 10);
-        }
-        addWrappedText(`Due: ${formatAmount(due.usd, due.lbp)}`, 10);
-        y += 4;
-      });
-    }
-
-    if (ecomOrders.length > 0) {
-      addSectionHeader(`E-Commerce Orders (${ecomOrders.length})`);
-      ecomOrders.forEach((order, index) => {
-        const due = calculateDue(order);
-        addWrappedText(`${index + 1}. ${order.voucher_no || order.order_id}`, 0, { bold: true });
-        addWrappedText(`Customer: ${order.customers?.name || '-'}`, 10);
-        addWrappedText(`Phone: ${order.customers?.phone || '-'}`, 10);
-        addWrappedText(`Address: ${order.address}`, 10);
-        addWrappedText(`Order: $${Number(order.order_amount_usd + order.delivery_fee_usd).toFixed(2)}`, 10);
-        addWrappedText(`Fee: $${Number(order.delivery_fee_usd).toFixed(2)}`, 10);
-        addWrappedText(`Due: $${due.usd.toFixed(2)}`, 10);
-        y += 4;
-      });
-    }
-
-    if (y > 700) {
+    // Prevent Summary layout from flowing poorly into the page bounds footer margins
+    if (y > 720) {
       doc.addPage();
       y = margin;
     }
 
-    doc.setDrawColor('#d1d5db');
-    doc.setLineWidth(0.5);
-    doc.line(margin, y, pageWidth - margin, y);
-    y += lineHeight;
+    // ==========================================
+    // 4. FINANCIAL SUMMARY BLOCK (Aligned Right)
+    // ==========================================
+    const summaryX = pageWidth - margin - 220;
 
-    doc.setFont(undefined, 'bold');
-    doc.text('Summary', margin, y);
-    y += lineHeight;
-    doc.setFont(undefined, 'normal');
-    addWrappedText(`Total Orders: ${totals.totalOrders}`);
-    addWrappedText(`Order Amount: ${formatAmount(totals.totalOrderAmountUsd, totals.totalOrderAmountLbp)}`);
-    addWrappedText(`Delivery Fees: ${formatAmount(totals.totalDeliveryFeesUsd, totals.totalDeliveryFeesLbp)}`);
-    addWrappedText(`Total Due: ${formatAmount(totals.totalDueToClientUsd, totals.totalDueToClientLbp)}`);
+    doc.setFont('Helvetica', 'bold').setFontSize(10);
+    doc.setTextColor('#0f172a');
+    doc.text('STATEMENT FINANCIAL SUMMARY', summaryX, y);
+    y += 8;
+    doc.setDrawColor('#cbd5e1').setLineWidth(0.5).line(summaryX, y, pageWidth - margin, y);
+    y += 14;
 
-    doc.save(`Statement-${clientName.replace(/[^a-zA-Z0-9]/g, '_')}-${format(new Date(), 'yyyyMMdd')}.pdf`);
-    toast.success('Statement exported as PDF');
+    const printSummaryRow = (label: string, value: string, isBold = false) => {
+      doc.setFont('Helvetica', isBold ? 'bold' : 'normal').setFontSize(9);
+      doc.setTextColor(isBold ? '#1e40af' : '#475569');
+      doc.text(label, summaryX, y);
+      doc.text(value, pageWidth - margin, y, { align: 'right' });
+      y += 16;
+    };
+
+    printSummaryRow('Total Tracked Orders:', String(totals.totalOrders));
+    printSummaryRow('Gross Order Volume:', formatAmount(totals.totalOrderAmountUsd, totals.totalOrderAmountLbp));
+    printSummaryRow('Aggregated Delivery Fees:', formatAmount(totals.totalDeliveryFeesUsd, totals.totalDeliveryFeesLbp));
+
+    doc.setDrawColor('#cbd5e1').setLineWidth(0.5).line(summaryX, y - 4, pageWidth - margin, y - 4);
+    y += 4;
+    printSummaryRow('NET DUE TO CLIENT:', formatAmount(totals.totalDueToClientUsd, totals.totalDueToClientLbp), true);
+
+    // ==========================================
+    // 5. FOOTER RUNNING METRICS (All Pages)
+    // ==========================================
+    const pageCount = (doc as any).internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFont('Helvetica', 'normal').setFontSize(7);
+      doc.setTextColor('#94a3b8');
+
+      // Top border line for system footer metrics
+      doc.setDrawColor('#e2e8f0').setLineWidth(0.5).line(margin, 800, pageWidth - margin, 800);
+
+      // Bottom Meta
+      doc.text(`Generated systematically via: Runners FMCG DMS Platform`, margin, 812);
+      doc.text(`Page ${i} of ${pageCount}`, pageWidth - margin, 812, { align: 'right' });
+    }
+
+    // Save actions
+    doc.save(`Statement-${format(new Date(), 'yyyyMMdd_HHmmss')}.pdf`);
+    toast.success('Professional statement exported successfully');
   };
 
   const generateWhatsAppText = () => {
@@ -334,12 +408,10 @@ export function ClientStatementPreview({
                     <TableHead>Notes</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
                     <TableHead className="text-right">Fee</TableHead>
-                    <TableHead className="text-right">Due</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {instantOrders.map((order) => {
-                    const due = calculateDue(order);
                     const orderUsd = Number(order.order_amount_usd || 0);
                     const orderLbp = Number(order.order_amount_lbp || 0);
                     const feeUsd = Number(order.delivery_fee_usd || 0);
@@ -362,9 +434,6 @@ export function ClientStatementPreview({
                         <TableCell className="text-right">
                           {order.driver_paid_for_client ? formatAmount(feeUsd, feeLbp) : '-'}
                         </TableCell>
-                        <TableCell className="text-right font-semibold">
-                          {formatAmount(due.usd, due.lbp)}
-                        </TableCell>
                       </TableRow>
                     );
                   })}
@@ -386,7 +455,6 @@ export function ClientStatementPreview({
                     <TableHead>Address</TableHead>
                     <TableHead className="text-right">Order</TableHead>
                     <TableHead className="text-right">Fee</TableHead>
-                    <TableHead className="text-right">Due</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -400,7 +468,6 @@ export function ClientStatementPreview({
                         <TableCell className="max-w-[150px] truncate">{order.address}</TableCell>
                         <TableCell className="text-right">${Number(order.order_amount_usd + order.delivery_fee_usd).toFixed(2)}</TableCell>
                         <TableCell className="text-right">${Number(order.delivery_fee_usd).toFixed(2)}</TableCell>
-                        <TableCell className="text-right font-semibold">${due.usd.toFixed(2)}</TableCell>
                       </TableRow>
                     );
                   })}

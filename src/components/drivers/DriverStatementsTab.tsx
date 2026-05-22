@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { FileText, Download, CheckCircle, Search, DollarSign, ChevronDown, ChevronUp, Wallet, Clock, TrendingUp, Eye, ChevronsUpDown, Check } from 'lucide-react';
+import { FileText, Download, CheckCircle, Search, DollarSign, ChevronDown, ChevronUp, Wallet, Clock, TrendingUp, Eye, ChevronsUpDown, Check, Copy, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
@@ -22,6 +22,7 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { DriverStatementPreview } from './DriverStatementPreview';
 import { DriverStatementInlineDetail } from './DriverStatementInlineDetail';
 import { cn } from '@/lib/utils';
+import autoTable from 'jspdf-autotable';
 
 export function DriverStatementsTab() {
   const { user } = useAuth();
@@ -271,82 +272,179 @@ export function DriverStatementsTab() {
     const doc = new jsPDF({ unit: 'pt', format: 'a4' });
     const margin = 40;
     const pageWidth = doc.internal.pageSize.getWidth();
-    const lineHeight = 18;
     let y = margin;
 
-    const addWrappedText = (text: string, indent = 0, options: { bold?: boolean } = {}) => {
-      if (y > 760) {
-        doc.addPage();
-        y = margin;
-      }
-      if (options.bold) {
-        doc.setFont(undefined, 'bold');
-      } else {
-        doc.setFont(undefined, 'normal');
-      }
-      const lines = doc.splitTextToSize(text, pageWidth - margin * 2 - indent);
-      lines.forEach((line) => {
-        doc.text(line, margin + indent, y);
-        y += lineHeight;
-      });
-    };
+    // ==========================================
+    // 1. HEADER SECTION (Clean, Corporate Style)
+    // ==========================================
 
-    const addSectionHeader = (title: string) => {
-      if (y > 700) {
-        doc.addPage();
-        y = margin;
-      }
-      doc.setFont(undefined, 'bold');
-      doc.setFontSize(12);
-      doc.text(title, margin, y);
-      y += lineHeight;
-      doc.setFontSize(10);
-    };
+    // Left Side: Brand ID
+    doc.setFont('Helvetica', 'bold').setFontSize(16);
+    doc.setTextColor('#0f172a'); // Slate 900
+    doc.text('RUNNERS FMCG', margin, y + 15);
 
-    doc.setFillColor('#1d4ed8');
-    doc.rect(margin, y, 120, 40, 'F');
-    doc.setTextColor('#ffffff');
-    doc.setFontSize(14);
-    doc.text('RUNNERS', margin + 10, y + 18);
-    doc.setFontSize(10);
-    doc.text('ERP', margin + 10, y + 34);
+    doc.setFont('Helvetica', 'normal').setFontSize(9);
+    doc.setTextColor('#64748b'); // Slate 500
+    doc.text('Distribution Management System', margin, y + 28);
 
-    doc.setTextColor('#111827');
-    doc.setFontSize(20);
-    doc.text('Driver Statement', margin + 150, y + 22);
-    doc.setFontSize(10);
-    doc.text(`Driver: ${selectedDriverData?.name || 'Driver'}`, margin + 150, y + 40);
-    doc.text(`Period: ${statementPeriodLabel}`, margin + 150, y + 56);
+    // Right Side: Document Status & Title
+    doc.setFont('Helvetica', 'bold').setFontSize(18);
+    doc.setTextColor('#1e40af'); // Deep Corporate Blue
+    doc.text('DRIVER STATEMENT', pageWidth - margin, y + 15, { align: 'right' });
 
-    y += 80;
-    addSectionHeader(`Orders (${selectedOrdersData.length})`);
+    doc.setFont('Helvetica', 'bold').setFontSize(10);
+    doc.setTextColor('#64748b');
+    doc.text('ERP SYSTEM GENERATED', pageWidth - margin, y + 28, { align: 'right' });
 
-    selectedOrdersData.forEach((order, index) => {
-      addWrappedText(`${index + 1}. ${order.order_id}`, 0, { bold: true });
-      addWrappedText(`Date: ${order.delivered_at ? format(new Date(order.delivered_at), 'MMM dd, yyyy') : '-'}`, 10);
-      addWrappedText(`Client: ${order.clients?.name || '-'}`, 10);
-      addWrappedText(`Collected: ${formatDualAmount(Number(order.collected_amount_usd || 0), Number(order.collected_amount_lbp || 0))}`, 10);
-      addWrappedText(`Fee: ${formatDualAmount(Number(order.delivery_fee_usd || 0), Number(order.delivery_fee_lbp || 0))}`, 10);
-      if (order.driver_paid_for_client) {
-        addWrappedText(`Driver Paid: ${formatDualAmount(Number(order.driver_paid_amount_usd || 0), Number(order.driver_paid_amount_lbp || 0))}`, 10);
-      }
-      y += 4;
+    y += 55;
+
+    // Divider Line
+    doc.setDrawColor('#e2e8f0').setLineWidth(1).line(margin, y, pageWidth - margin, y);
+    y += 20;
+
+    // ==========================================
+    // 2. DRIVER & PERIOD DETAILS PANEL (Reference Look)
+    // ==========================================
+    doc.setFillColor('#f8fafc'); // Light background tint panel
+    doc.rect(margin, y, pageWidth - (margin * 2), 55, 'F');
+
+    doc.setFont('Helvetica', 'bold').setFontSize(9);
+    doc.setTextColor('#475569');
+    doc.text('STATEMENT DETAILS', margin + 15, y + 18);
+
+    doc.setFont('Helvetica', 'normal').setFontSize(9);
+    doc.setTextColor('#0f172a');
+    doc.text(`Driver: ${selectedDriverData?.name || 'Driver'}`, margin + 15, y + 34);
+    doc.text(`Period Range: ${statementPeriodLabel}`, margin + 15, y + 46);
+
+    doc.text(`Export Date: ${format(new Date(), 'MM/dd/yyyy')}`, pageWidth - margin - 15, y + 18, { align: 'right' });
+    doc.text(`Currency Base: USD / LBP`, pageWidth - margin - 15, y + 34, { align: 'right' });
+    doc.text(`Total Records: ${selectedOrdersData.length} Orders`, pageWidth - margin - 15, y + 46, { align: 'right' });
+
+    y += 75;
+
+    // ==========================================
+    // 3. SECTIONS & DATA TABLE
+    // ==========================================
+
+    // Prepare rows exactly matching the operational fields of your issue code logic
+    const tableRows = selectedOrdersData.map((order, index) => {
+      const orderDate = order.delivered_at
+        ? format(new Date(order.delivered_at), 'MMM dd, yyyy')
+        : '-';
+
+      const driverPaidVal = order.driver_paid_for_client
+        ? formatDualAmount(Number(order.driver_paid_amount_usd || 0), Number(order.driver_paid_amount_lbp || 0))
+        : '-';
+
+      return [
+        String(index + 1),
+        orderDate,
+        order.order_id,
+        order.clients?.name || '-',
+        formatDualAmount(Number(order.collected_amount_usd || 0), Number(order.collected_amount_lbp || 0)),
+        formatDualAmount(Number(order.delivery_fee_usd || 0), Number(order.delivery_fee_lbp || 0)),
+        driverPaidVal
+      ];
     });
 
-    if (y > 700) {
+    autoTable(doc, {
+      startY: y,
+      margin: { left: margin, right: margin },
+      head: [['#', 'DELIVERED DATE', 'ORDER ID', 'CLIENT', 'COLLECTED AMOUNT', 'DELIVERY FEE', 'DRIVER PAID REFUND']],
+      body: tableRows,
+      theme: 'striped',
+      headStyles: {
+        fillColor: '#1e40af', // Blue Theme Match
+        textColor: '#ffffff',
+        fontSize: 8,
+        fontStyle: 'bold',
+        halign: 'left',
+      },
+      bodyStyles: {
+        fontSize: 8,
+        textColor: '#334155',
+        cellPadding: 7,
+      },
+      columnStyles: {
+        0: { cellWidth: 25 },  // Index
+        1: { cellWidth: 80 },  // Date
+        2: { cellWidth: 85 },  // Order Reference String
+        3: { cellWidth: 95 },  // Client Name
+        4: { cellWidth: 85 },  // Collected Metrics
+        5: { cellWidth: 70 },  // Fee
+        6: { cellWidth: 75, halign: 'right' } // Refund Total
+      },
+      styles: {
+        overflow: 'linebreak',
+      },
+      didDrawPage: (data) => {
+        y = data.cursor ? data.cursor.y : y;
+      }
+    });
+
+    // Get dynamic ending coordinate post table generation
+    const finalY = (doc as any).lastAutoTable.finalY || y;
+    y = finalY + 25;
+
+    // Prevent page breaks splitting the Summary container block awkwardly
+    if (y > 710) {
       doc.addPage();
       y = margin;
     }
 
-    addSectionHeader('Summary');
-    addWrappedText(`Total Collected: ${formatDualAmount(totals.totalCollectedUsd, totals.totalCollectedLbp)}`);
-    addWrappedText(`Delivery Fees: ${formatDualAmount(totals.totalDeliveryFeesUsd, totals.totalDeliveryFeesLbp)}`);
-    addWrappedText(`Driver Paid Refund: ${formatDualAmount(totals.totalDriverPaidUsd, totals.totalDriverPaidLbp)}`);
-    addWrappedText(`Net Due: ${formatDualAmount(netDueUsd, netDueLbp)}`);
+    // ==========================================
+    // 4. FINANCIAL SUMMARY AREA (Aligned Right)
+    // ==========================================
+    const summaryWidth = 240;
+    const summaryX = pageWidth - margin - summaryWidth;
 
-    const fileName = `DriverStatement-${selectedDriverData?.name?.replace(/[^a-zA-Z0-9]/g, '_') || 'Driver'}-${format(new Date(), 'yyyyMMdd')}.pdf`;
+    doc.setFont('Helvetica', 'bold').setFontSize(10);
+    doc.setTextColor('#0f172a');
+    doc.text('DRIVER SUMMARY TOTALS', summaryX, y);
+    y += 8;
+    doc.setDrawColor('#cbd5e1').setLineWidth(0.5).line(summaryX, y, pageWidth - margin, y);
+    y += 14;
+
+    const printSummaryRow = (label: string, value: string, isBold = false) => {
+      doc.setFont('Helvetica', isBold ? 'bold' : 'normal').setFontSize(9);
+      doc.setTextColor(isBold ? '#1e40af' : '#475569');
+      doc.text(label, summaryX, y);
+      doc.text(value, pageWidth - margin, y, { align: 'right' });
+      y += 16;
+    };
+
+    printSummaryRow('Total Tracked Orders:', String(selectedOrdersData.length));
+    printSummaryRow('Total Collected:', formatDualAmount(totals.totalCollectedUsd, totals.totalCollectedLbp));
+    printSummaryRow('Delivery Fees System Total:', formatDualAmount(totals.totalDeliveryFeesUsd, totals.totalDeliveryFeesLbp));
+    printSummaryRow('Driver Paid Out Refund:', formatDualAmount(totals.totalDriverPaidUsd, totals.totalDriverPaidLbp));
+
+    doc.setDrawColor('#cbd5e1').setLineWidth(0.5).line(summaryX, y - 4, pageWidth - margin, y - 4);
+    y += 4;
+    printSummaryRow('NET DUE AMOUNT:', formatDualAmount(netDueUsd, netDueLbp), true);
+
+    // ==========================================
+    // 5. STABLE RUNNING FOOTERS
+    // ==========================================
+    const pageCount = (doc as any).internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFont('Helvetica', 'normal').setFontSize(7);
+      doc.setTextColor('#94a3b8');
+
+      // Bottom Border separator rule
+      doc.setDrawColor('#e2e8f0').setLineWidth(0.5).line(margin, 800, pageWidth - margin, 800);
+
+      doc.text(`System Reference: Drivers Distribution Logistics (Runners ERP Workflow)`, margin, 812);
+      doc.text(`Page ${i} of ${pageCount}`, pageWidth - margin, 812, { align: 'right' });
+    }
+
+    // File Name generation logic cleanup matching Driver identification safely
+    const formattedDriverName = selectedDriverData?.name?.replace(/[^a-zA-Z0-9]/g, '_') || 'Driver';
+    const fileName = `DriverStatement-${formattedDriverName}-${format(new Date(), 'yyyyMMdd')}.pdf`;
+
     doc.save(fileName);
-    toast.success('Statement exported as PDF');
+    toast.success('Driver Statement exported as clean layout PDF');
   };
 
   const issueStatementMutation = useMutation({
@@ -747,6 +845,7 @@ export function DriverStatementsTab() {
                           <TableHead className="py-2">Date</TableHead>
                           <TableHead className="py-2">Order</TableHead>
                           <TableHead className="py-2">Client</TableHead>
+                          <TableHead className="py-2">Address</TableHead>
                           <TableHead className="py-2">Notes</TableHead>
                           <TableHead className="py-2 text-right">Collected (incl. Fee)</TableHead>
                           <TableHead className="py-2 text-right">Refund to Driver</TableHead>
@@ -766,6 +865,7 @@ export function DriverStatementsTab() {
                             </TableCell>
                             <TableCell className="py-1 font-mono">{order.order_id}</TableCell>
                             <TableCell className="py-1">{order.clients?.name}</TableCell>
+                            <TableCell className="py-1">{order.address}</TableCell>
                             <TableCell className="py-1">{order.notes}</TableCell>
                             <TableCell className="py-1 text-right font-mono">
                               {Number(order.collected_amount_usd || 0) > 0 || Number(order.collected_amount_lbp || 0) > 0 ? (
@@ -1030,11 +1130,11 @@ export function DriverStatementsTab() {
       {/* Issue Statement Preview Dialog */}
       {selectedDriver && selectedDriverData && (
         <Dialog open={issuePreviewOpen} onOpenChange={setIssuePreviewOpen}>
-          <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Statement Preview - {selectedDriverData.name}</DialogTitle>
               <DialogDescription>
-                Review the statement before issuing. You can copy for WhatsApp and then confirm to collect payment.
+                Review the statement before issuing. YReview the statement before issuing. You can copy for WhatsApp and then confirm to collect payment.
               </DialogDescription>
             </DialogHeader>
 
@@ -1052,6 +1152,7 @@ export function DriverStatementsTab() {
                       <TableHead className="py-2">Date</TableHead>
                       <TableHead className="py-2">Order</TableHead>
                       <TableHead className="py-2">Client</TableHead>
+                      <TableHead className="py-2">Address</TableHead>
                       <TableHead className="py-2 text-right">Amount</TableHead>
                       <TableHead className="py-2 text-right">Fee</TableHead>
                       <TableHead className="py-2 text-right">Collected</TableHead>
@@ -1075,6 +1176,7 @@ export function DriverStatementsTab() {
                           </TableCell>
                           <TableCell className="py-1.5 font-mono">{order.order_id}</TableCell>
                           <TableCell className="py-1.5">{order.clients?.name}</TableCell>
+                          <TableCell className="py-1.5">{order.address || '-'}</TableCell>
                           <TableCell className="py-1.5 text-right font-mono">
                             {formatDualAmount(
                               Number(order.order_amount_usd || 0),
@@ -1213,69 +1315,62 @@ export function DriverStatementsTab() {
                 </div>
               </div>
 
-              {/* WhatsApp Copy */}
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => {
-                  const selectedOrdersData = orders?.filter(o => selectedOrders.includes(o.id)) || [];
-                  const formatAmount = (usd: number, lbp: number) => {
-                    const parts = [];
-                    if (usd !== 0) parts.push(`$${usd.toFixed(2)}`);
-                    if (lbp !== 0) parts.push(`${lbp.toLocaleString()} LL`);
-                    return parts.length > 0 ? parts.join(' / ') : '-';
-                  };
-
-                  const lines = [
-                    `📋 *Driver Statement*`,
-                    `Driver: ${selectedDriverData.name}`,
-                    `Period: ${format(new Date(dateFrom), 'MMM dd')} - ${format(new Date(dateTo), 'MMM dd, yyyy')}`,
-                    ``,
-                    `*Orders (${selectedOrdersData.length}):*`,
-                    ...selectedOrdersData.map(o => {
-                      const isDriverPaid = o.driver_paid_for_client === true;
-                      if (isDriverPaid) {
-                        return `• ${o.order_id} - Paid: ${formatAmount(Number(o.driver_paid_amount_usd || 0), Number(o.driver_paid_amount_lbp || 0))} (Refund)`;
-                      }
-                      return `• ${o.order_id} - Collected: ${formatAmount(Number(o.collected_amount_usd || 0), Number(o.collected_amount_lbp || 0))}`;
-                    }),
-                    ``,
-                    `*Summary:*`,
-                    `Total Collected: ${formatAmount(totals.totalCollectedUsd, totals.totalCollectedLbp)}`,
-                    (totals.totalDriverPaidUsd > 0 || totals.totalDriverPaidLbp > 0) ? `Refund to Driver: -${formatAmount(totals.totalDriverPaidUsd, totals.totalDriverPaidLbp)}` : '',
-                    ``,
-                    `💰 *Net Due: ${formatAmount(netDueUsd, netDueLbp)}*`
-                  ].filter(Boolean).join('\n');
-
-                  navigator.clipboard.writeText(lines);
-                  toast.success('Copied to clipboard!');
-                }}
-              >
-                📋 Copy for WhatsApp
-              </Button>
-              <div className="grid grid-cols-2 gap-2">
-                <Button variant="outline" onClick={exportIssueStatementAsExcel}>
-                  <Download className="mr-2 h-4 w-4" />
-                  Export Excel
-                </Button>
-                <Button variant="outline" onClick={exportIssueStatementAsPdf}>
-                  <Download className="mr-2 h-4 w-4" />
-                  Export PDF
-                </Button>
-              </div>
             </div>
 
-            <DialogFooter>
+            <DialogFooter className="gap-2">
               <Button variant="outline" onClick={() => setIssuePreviewOpen(false)}>
-                Cancel
+                <X className="mr-2 h-4 w-4" /> Close
               </Button>
-              <Button
-                onClick={() => issueStatementMutation.mutate()}
-                disabled={issueStatementMutation.isPending}
-              >
-                <CheckCircle className="mr-1.5 h-4 w-4" />
-                {issueStatementMutation.isPending ? 'Processing...' : 'Issue statment'}
+              {issueStatementMutation && (
+                <Button
+                  onClick={() => issueStatementMutation.mutate()}
+                  disabled={issueStatementMutation.isPending || isLoading}
+                >
+                  <CheckCircle className="mr-1.5 h-4 w-4" /> Issue Statement
+                </Button>
+              )}
+              <Button onClick={exportIssueStatementAsPdf} disabled={isLoading || orders.length === 0}>
+                <FileText className="mr-1.5 h-3.5 w-3.5" /> Export PDF
               </Button>
+              <Button onClick={exportIssueStatementAsExcel} disabled={isLoading || orders.length === 0}>
+                <FileText className="mr-1.5 h-3.5 w-3.5" /> Export Excel
+              </Button>
+              <Button onClick={() => {
+                const selectedOrdersData = orders?.filter(o => selectedOrders.includes(o.id)) || [];
+                const formatAmount = (usd: number, lbp: number) => {
+                  const parts = [];
+                  if (usd !== 0) parts.push(`$${usd.toFixed(2)}`);
+                  if (lbp !== 0) parts.push(`${lbp.toLocaleString()} LL`);
+                  return parts.length > 0 ? parts.join(' / ') : '-';
+                };
+
+                const lines = [
+                  `📋 *Driver Statement*`,
+                  `Driver: ${selectedDriverData.name}`,
+                  `Period: ${format(new Date(dateFrom), 'MMM dd')} - ${format(new Date(dateTo), 'MMM dd, yyyy')}`,
+                  ``,
+                  `*Orders (${selectedOrdersData.length}):*`,
+                  ...selectedOrdersData.map(o => {
+                    const isDriverPaid = o.driver_paid_for_client === true;
+                    if (isDriverPaid) {
+                      return `• ${o.order_id} - Paid: ${formatAmount(Number(o.driver_paid_amount_usd || 0), Number(o.driver_paid_amount_lbp || 0))} (Refund)`;
+                    }
+                    return `• ${o.order_id} - Collected: ${formatAmount(Number(o.collected_amount_usd || 0), Number(o.collected_amount_lbp || 0))}`;
+                  }),
+                  ``,
+                  `*Summary:*`,
+                  `Total Collected: ${formatAmount(totals.totalCollectedUsd, totals.totalCollectedLbp)}`,
+                  (totals.totalDriverPaidUsd > 0 || totals.totalDriverPaidLbp > 0) ? `Refund to Driver: -${formatAmount(totals.totalDriverPaidUsd, totals.totalDriverPaidLbp)}` : '',
+                  ``,
+                  `💰 *Net Due: ${formatAmount(netDueUsd, netDueLbp)}*`
+                ].filter(Boolean).join('\n');
+
+                navigator.clipboard.writeText(lines);
+                toast.success('Copied to clipboard!');
+              }} disabled={isLoading || orders.length === 0}>
+                <Copy className="mr-2 h-4 w-4" /> Copy for WhatsApp
+              </Button>
+
             </DialogFooter>
           </DialogContent>
         </Dialog>

@@ -132,6 +132,7 @@ export function DriverStatementInlineDetail({ statement }: DriverStatementInline
                 <TableHead className="py-1.5">Date</TableHead>
                 <TableHead className="py-1.5">Order</TableHead>
                 <TableHead className="py-1.5">Client</TableHead>
+                <TableHead className="py-1.5">Address</TableHead>
                 <TableHead className="py-1.5">Notes</TableHead>
                 <TableHead className="py-1.5 text-right">Collected</TableHead>
                 <TableHead className="py-1.5 text-right">Fee</TableHead>
@@ -155,6 +156,7 @@ export function DriverStatementInlineDetail({ statement }: DriverStatementInline
                     <TableCell className="py-1.5">{order.delivered_at ? format(new Date(order.delivered_at), 'MMM dd') : '-'}</TableCell>
                     <TableCell className="py-1.5 font-mono">{orderRef}</TableCell>
                     <TableCell className="py-1.5">{order.clients?.name || '-'}</TableCell>
+                    <TableCell className="py-1.5">{order.address || '-'}</TableCell>
                     <TableCell className="py-1.5">{order.notes || '-'}</TableCell>
                     <TableCell className="py-1.5 text-right">
                       {formatAmount(collectedUsd, collectedLbp)}
