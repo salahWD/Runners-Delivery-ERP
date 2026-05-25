@@ -3,10 +3,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Copy } from 'lucide-react';
+import { Copy, FileText } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
+import { jsPDF } from 'jspdf';
+import * as XLSX from 'xlsx';
+import autoTable from 'jspdf-autotable';
 
 interface ClientStatementInlineDetailProps {
   statement: {
@@ -83,6 +86,247 @@ export function ClientStatementInlineDetail({ statement }: ClientStatementInline
   const instantOrders = orders?.filter((o: any) => o.order_type === 'instant' || o.order_type === 'errand') || [];
   const ecomOrders = orders?.filter((o: any) => o.order_type === 'ecom') || [];
 
+  const clientName = statement.clients?.name || 'Client';
+  const formatDateLabel = (dateString: string) => format(new Date(dateString), 'MMM dd, yyyy');
+  const statementPeriodLabel = `${formatDateLabel(statement.period_from)} - ${formatDateLabel(statement.period_to)}`;
+
+  const exportStatementAsExcel = () => {
+    const workbook = XLSX.utils.book_new();
+    const rows: Array<Array<string | number>> = [
+      ['RUNNERS ERP BATCH PREVIEW'],
+      ['Client(s)', clientName],
+      ['Period Range', statementPeriodLabel],
+      [],
+      ['Instant / Errand Orders'],
+      ['Date', 'Order ID', 'Address', 'Driver Paid', 'Notes', 'Amount', 'Fee', 'Due'],
+    ];
+
+    instantOrders.forEach((order) => {
+      const due = calculateDue(order);
+      rows.push([
+        formatDateLabel(order.created_at),
+        order.order_id,
+        order.address,
+        order.driver_paid_for_client ? 'Yes' : 'No',
+        order.notes || '-',
+        formatAmount(Number(order.order_amount_usd || 0), Number(order.order_amount_lbp || 0)),
+        order.driver_paid_for_client ? formatAmount(Number(order.delivery_fee_usd || 0), Number(order.delivery_fee_lbp || 0)) : '-',
+        formatAmount(due.usd, due.lbp),
+      ]);
+    });
+
+    if (ecomOrders.length > 0) {
+      rows.push([], ['E-Commerce Orders'], ['Voucher #', 'Customer', 'Phone', 'Address', 'Order', 'Fee', 'Due']);
+      ecomOrders.forEach((order) => {
+        const due = calculateDue(order);
+        rows.push([
+          order.voucher_no || order.order_id,
+          order.customers?.name || '-',
+          order.customers?.phone || '-',
+          order.address,
+          `$${Number(order.order_amount_usd + order.delivery_fee_usd).toFixed(2)}`,
+          `$${Number(order.delivery_fee_usd).toFixed(2)}`,
+          `$${due.usd.toFixed(2)}`,
+        ]);
+      });
+    }
+
+    rows.push([], ['SUMMARY']);
+    rows.push(['Total Orders', totals.totalOrders]);
+    rows.push(['Order Amount', formatAmount(totals.totalOrderAmountUsd, totals.totalOrderAmountLbp)]);
+    rows.push(['Delivery Fees', formatAmount(totals.totalDeliveryFeesUsd, totals.totalDeliveryFeesLbp)]);
+    rows.push(['Total Due', formatAmount(totals.totalDueToClientUsd, totals.totalDueToClientLbp)]);
+
+    const worksheet = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Preview');
+    const fileName = `Preview-${format(new Date(), 'yyyyMMdd_HHmmss')}.xlsx`;
+    XLSX.writeFile(workbook, fileName);
+    toast.success('Preview metrics exported as Excel');
+  };
+
+  const exportStatementAsPdf = () => {
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const margin = 40;
+    const pageWidth = doc.internal.pageSize.getWidth();
+    let y = margin;
+
+    // ==========================================
+    // 1. HEADER SECTION (Clean & Modern Layout)
+    // ==========================================
+
+    // Left: Brand Identification
+    doc.setFont('Helvetica', 'bold').setFontSize(16);
+    doc.setTextColor('#0f172a'); // Slate 900
+    doc.text('RUNNERS FMCG', margin, y + 15);
+
+    doc.setFont('Helvetica', 'normal').setFontSize(9);
+    doc.setTextColor('#64748b'); // Slate 500
+    doc.text('Distribution Management System', margin, y + 28);
+
+    // Right: Document Title / Status Meta
+    doc.setFont('Helvetica', 'bold').setFontSize(18);
+    doc.setTextColor('#1e40af'); // Classic Corporate Blue
+    doc.text('STATEMENT PREVIEW', pageWidth - margin, y + 15, { align: 'right' });
+
+    doc.setFont('Helvetica', 'bold').setFontSize(10);
+    doc.setTextColor('#ef4444'); // Red alert badge color for draft status
+    doc.text('DRAFT REPORT', pageWidth - margin, y + 28, { align: 'right' });
+
+    y += 55;
+
+    // Divider Line
+    doc.setDrawColor('#e2e8f0').setLineWidth(1).line(margin, y, pageWidth - margin, y);
+    y += 20;
+
+    // ==========================================
+    // 2. ORDER DETAILS / METADATA METRICS BLOCK
+    // ==========================================
+    doc.setFillColor('#f8fafc'); // Very light grey/blue background panel
+    doc.rect(margin, y, pageWidth - (margin * 2), 55, 'F');
+
+    doc.setFont('Helvetica', 'bold').setFontSize(9);
+    doc.setTextColor('#475569');
+    doc.text('METADATA DETAILS', margin + 15, y + 18);
+
+    // Dynamic Data Rows inside Panel
+    doc.setFont('Helvetica', 'normal').setFontSize(9);
+    doc.setTextColor('#0f172a');
+    doc.text(`Client(s): ${clientName || 'N/A'}`, margin + 15, y + 34);
+    doc.text(`Statement Period: ${statementPeriodLabel || 'All Time'}`, margin + 15, y + 46);
+
+    doc.text(`Generated Date: ${format(new Date(), 'MM/dd/yyyy')}`, pageWidth - margin - 15, y + 18, { align: 'right' });
+    doc.text(`Currency: USD / LBP`, pageWidth - margin - 15, y + 34, { align: 'right' });
+    doc.text(`Total Records: ${totals.totalOrders} Orders`, pageWidth - margin - 15, y + 46, { align: 'right' });
+
+    y += 75;
+
+    // ==========================================
+    // 3. MAIN DATA TABLE (Replacing messy lists)
+    // ==========================================
+    const allOrders = [...instantOrders, ...ecomOrders];
+
+    // Map your customized fields directly into visual structural rows
+    const tableRows = allOrders.map((order, index) => {
+      // const due = calculateDue(order);
+      const orderIdentifier = order.order_type === 'ecom'
+        ? (order.voucher_no || order.order_id)
+        : order.order_id;
+
+      // Compile dynamic, descriptive summary strings per cell row
+      // const entityDetails = order.order_type === 'ecom'
+      //   ? `Cust: ${order.customers?.name || '-'}\nPh: ${order.customers?.phone || '-'}`
+      //   : `Instant Fleet Order\nPaid to Driver: ${order.driver_paid_for_client ? 'Yes' : 'No'}`;
+
+      return [
+        orderIdentifier || String(index + 1),
+        formatDateLabel(order.created_at),
+        order.customers?.name || "-",
+        order.customers?.phone || "-",
+        order.address || '-',
+        formatAmount(Number(order.order_amount_usd || 0), Number(order.order_amount_lbp || 0)),
+        formatAmount(Number(order.delivery_fee_usd || 0), Number(order.delivery_fee_lbp || 0)),
+        // `Amt: ${formatAmount(Number(order.order_amount_usd || 0), Number(order.order_amount_lbp || 0))}\nFee: ${formatAmount(Number(order.delivery_fee_usd || 0), Number(order.delivery_fee_lbp || 0))}`,
+        // formatAmount(due.usd, due.lbp)
+      ];
+    });
+
+    autoTable(doc, {
+      startY: y,
+      margin: { left: margin, right: margin },
+      head: [['ID', 'DATE', 'CONTACT', 'PHONE', 'DELIVERY ADDRESS', 'AMOUNT', 'FEE'/* , 'TOTAL DUE' */]],
+      body: tableRows,
+      theme: 'striped',
+      headStyles: {
+        fillColor: '#1e40af', // Blue standard theme from your reference requirement
+        textColor: '#ffffff',
+        fontSize: 8,
+        fontStyle: 'bold',
+        halign: 'left',
+      },
+      bodyStyles: {
+        fontSize: 8,
+        textColor: '#334155',
+        cellPadding: 6,
+      },
+      columnStyles: {
+        0: { cellWidth: 40 },  // ID
+        1: { cellWidth: 75 },  // Date
+        2: { cellWidth: 75 },  // Contact
+        3: { cellWidth: 65 }, // phone
+        4: { cellWidth: 100 }, // Address
+        5: { cellWidth: 80 }, // amount
+        6: { cellWidth: 80 }, // fee
+        // 6: { cellWidth: 70, fontStyle: 'bold', halign: 'right' }  // Balance Line items
+      },
+      styles: {
+        overflow: 'linebreak',
+      },
+      didDrawPage: (data) => {
+        // Dynamic y alignment sync updates if multiple page height calculations jump
+        y = data.cursor ? data.cursor.y : y;
+      }
+    });
+
+    // Get final Y position after the automatic table renders to draw summary
+    const finalY = (doc as any).lastAutoTable.finalY || y;
+    y = finalY + 25;
+
+    // Prevent Summary layout from flowing poorly into the page bounds footer margins
+    if (y > 720) {
+      doc.addPage();
+      y = margin;
+    }
+
+    // ==========================================
+    // 4. FINANCIAL SUMMARY BLOCK (Aligned Right)
+    // ==========================================
+    const summaryX = pageWidth - margin - 220;
+
+    doc.setFont('Helvetica', 'bold').setFontSize(10);
+    doc.setTextColor('#0f172a');
+    doc.text('STATEMENT FINANCIAL SUMMARY', summaryX, y);
+    y += 8;
+    doc.setDrawColor('#cbd5e1').setLineWidth(0.5).line(summaryX, y, pageWidth - margin, y);
+    y += 14;
+
+    const printSummaryRow = (label: string, value: string, isBold = false) => {
+      doc.setFont('Helvetica', isBold ? 'bold' : 'normal').setFontSize(9);
+      doc.setTextColor(isBold ? '#1e40af' : '#475569');
+      doc.text(label, summaryX, y);
+      doc.text(value, pageWidth - margin, y, { align: 'right' });
+      y += 16;
+    };
+
+    printSummaryRow('Total Tracked Orders:', String(totals.totalOrders));
+    printSummaryRow('Gross Order Volume:', formatAmount(totals.totalOrderAmountUsd, totals.totalOrderAmountLbp));
+    printSummaryRow('Aggregated Delivery Fees:', formatAmount(totals.totalDeliveryFeesUsd, totals.totalDeliveryFeesLbp));
+
+    doc.setDrawColor('#cbd5e1').setLineWidth(0.5).line(summaryX, y - 4, pageWidth - margin, y - 4);
+    y += 4;
+    printSummaryRow('NET DUE TO CLIENT:', formatAmount(totals.totalDueToClientUsd, totals.totalDueToClientLbp), true);
+
+    // ==========================================
+    // 5. FOOTER RUNNING METRICS (All Pages)
+    // ==========================================
+    const pageCount = (doc as any).internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFont('Helvetica', 'normal').setFontSize(7);
+      doc.setTextColor('#94a3b8');
+
+      // Top border line for system footer metrics
+      doc.setDrawColor('#e2e8f0').setLineWidth(0.5).line(margin, 800, pageWidth - margin, 800);
+
+      // Bottom Meta
+      doc.text(`Generated systematically via: Runners FMCG DMS Platform`, margin, 812);
+      doc.text(`Page ${i} of ${pageCount}`, pageWidth - margin, 812, { align: 'right' });
+    }
+
+    // Save actions
+    doc.save(`Statement-${format(new Date(), 'yyyyMMdd_HHmmss')}.pdf`);
+    toast.success('Professional statement exported successfully');
+  };
+
   const generateWhatsAppText = () => {
     const clientName = statement.clients?.name || 'Client';
     const formatAmount = (usd: number, lbp: number) => {
@@ -144,11 +388,19 @@ export function ClientStatementInlineDetail({ statement }: ClientStatementInline
   return (
     <div className="p-4 bg-muted/30 space-y-4">
       {/* Copy Button */}
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
         <Button variant="outline" size="sm" onClick={copyToClipboard} className="h-7 text-xs">
           <Copy className="mr-1.5 h-3 w-3" />
           Copy for WhatsApp
         </Button>
+
+        <Button size="sm" onClick={exportStatementAsPdf} className="h-7 text-xs" disabled={isLoading || orders.length === 0}>
+          <FileText className="mr-1.5 h-3 w-3" /> Export PDF
+        </Button>
+        <Button size="sm" onClick={exportStatementAsExcel} className="h-7 text-xs" disabled={isLoading || orders.length === 0}>
+          <FileText className="mr-1.5 h-3 w-3" /> Export Excel
+        </Button>
+
       </div>
 
       {/* Instant Orders */}
@@ -166,12 +418,12 @@ export function ClientStatementInlineDetail({ statement }: ClientStatementInline
                   <TableHead className="py-1.5">Driver Paid</TableHead>
                   <TableHead className="py-1.5 text-right">Order Amount</TableHead>
                   <TableHead className="py-1.5 text-right">Fee</TableHead>
-                  <TableHead className="py-1.5 text-right">Due</TableHead>
+                  {/* <TableHead className="py-1.5 text-right">Due</TableHead> */}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {instantOrders.map((order: any) => {
-                  const due = calculateDue(order);
+                  // const due = calculateDue(order);
                   const orderUsd = Number(order.order_amount_usd || 0);
                   const orderLbp = Number(order.order_amount_lbp || 0);
                   const feeUsd = Number(order.delivery_fee_usd || 0);
@@ -194,9 +446,9 @@ export function ClientStatementInlineDetail({ statement }: ClientStatementInline
                       <TableCell className="py-1.5 text-right">
                         {order.driver_paid_for_client ? formatAmount(feeUsd, feeLbp) : '-'}
                       </TableCell>
-                      <TableCell className="py-1.5 text-right font-semibold">
+                      {/* <TableCell className="py-1.5 text-right font-semibold">
                         {formatAmount(due.usd, due.lbp)}
-                      </TableCell>
+                      </TableCell> */}
                     </TableRow>
                   );
                 })}
@@ -220,12 +472,12 @@ export function ClientStatementInlineDetail({ statement }: ClientStatementInline
                   <TableHead className="py-1.5">Address</TableHead>
                   <TableHead className="py-1.5 text-right">Order</TableHead>
                   <TableHead className="py-1.5 text-right">Fee</TableHead>
-                  <TableHead className="py-1.5 text-right">Due</TableHead>
+                  {/* <TableHead className="py-1.5 text-right">Due</TableHead> */}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {ecomOrders.map((order: any) => {
-                  const due = calculateDue(order);
+                  // const due = calculateDue(order);
                   return (
                     <TableRow key={order.id} className="text-xs">
                       <TableCell className="py-1.5 font-mono">{order.voucher_no || order.order_id}</TableCell>
@@ -234,7 +486,7 @@ export function ClientStatementInlineDetail({ statement }: ClientStatementInline
                       <TableCell className="py-1.5 max-w-[150px] truncate">{order.address}</TableCell>
                       <TableCell className="py-1.5 text-right">${Number(order.order_amount_usd).toFixed(2)}</TableCell>
                       <TableCell className="py-1.5 text-right">${Number(order.delivery_fee_usd).toFixed(2)}</TableCell>
-                      <TableCell className="py-1.5 text-right font-semibold">${due.usd.toFixed(2)}</TableCell>
+                      {/* <TableCell className="py-1.5 text-right font-semibold">${due.usd.toFixed(2)}</TableCell> */}
                     </TableRow>
                   );
                 })}
