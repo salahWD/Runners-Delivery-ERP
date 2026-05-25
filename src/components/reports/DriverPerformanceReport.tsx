@@ -20,7 +20,7 @@ export const DriverPerformanceReport = ({ dateFrom, dateTo }: DriverPerformanceR
         .from('drivers')
         .select('*')
         .order('name');
-      
+
       if (error) throw error;
       return data;
     },
@@ -35,7 +35,7 @@ export const DriverPerformanceReport = ({ dateFrom, dateTo }: DriverPerformanceR
         .gte('created_at', dateFrom)
         .lte('created_at', dateTo + 'T23:59:59')
         .not('driver_id', 'is', null);
-      
+
       if (error) throw error;
       return data;
     },
@@ -43,14 +43,14 @@ export const DriverPerformanceReport = ({ dateFrom, dateTo }: DriverPerformanceR
 
   const driverStats = (() => {
     if (!drivers || !ordersData) return [];
-    
+
     return drivers.map(driver => {
       const driverOrders = ordersData.filter(o => o.driver_id === driver.id);
-      const deliveredOrders = driverOrders.filter(o => o.status === 'Delivered');
+      const deliveredOrders = driverOrders.filter(o => o.status === 'Delivered' || o.status === 'DriverCollected');
       const totalDeliveryFees = deliveredOrders.reduce((sum, o) => sum + Number(o.delivery_fee_usd || 0), 0);
       const totalCollected = deliveredOrders.reduce((sum, o) => sum + Number(o.collected_amount_usd || 0), 0);
       const returnedOrders = driverOrders.filter(o => o.status === 'Returned' || o.status === 'Cancelled');
-      
+
       return {
         id: driver.id,
         name: driver.name,
@@ -61,8 +61,8 @@ export const DriverPerformanceReport = ({ dateFrom, dateTo }: DriverPerformanceR
         totalOrders: driverOrders.length,
         deliveredOrders: deliveredOrders.length,
         returnedOrders: returnedOrders.length,
-        deliveryRate: driverOrders.length > 0 
-          ? ((deliveredOrders.length / driverOrders.length) * 100).toFixed(1) 
+        deliveryRate: driverOrders.length > 0
+          ? ((deliveredOrders.length / driverOrders.length) * 100).toFixed(1)
           : '0',
         totalDeliveryFees,
         totalCollected,
@@ -111,9 +111,9 @@ export const DriverPerformanceReport = ({ dateFrom, dateTo }: DriverPerformanceR
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                 <XAxis type="number" className="text-xs" />
                 <YAxis dataKey="name" type="category" width={80} className="text-xs" />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: 'hsl(var(--card))', 
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'hsl(var(--card))',
                     border: '1px solid hsl(var(--border))',
                     borderRadius: '8px',
                   }}
@@ -167,9 +167,9 @@ export const DriverPerformanceReport = ({ dateFrom, dateTo }: DriverPerformanceR
                       <TableCell className="text-center text-green-600">{driver.deliveredOrders}</TableCell>
                       <TableCell className="text-center text-red-600">{driver.returnedOrders}</TableCell>
                       <TableCell className="text-center">
-                        <Badge 
-                          variant={Number(driver.deliveryRate) >= 90 ? 'default' : 
-                                   Number(driver.deliveryRate) >= 70 ? 'secondary' : 'destructive'}
+                        <Badge
+                          variant={Number(driver.deliveryRate) >= 90 ? 'default' :
+                            Number(driver.deliveryRate) >= 70 ? 'secondary' : 'destructive'}
                         >
                           {driver.deliveryRate}%
                         </Badge>

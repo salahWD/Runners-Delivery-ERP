@@ -21,7 +21,7 @@ export const RevenueReport = ({ dateFrom, dateTo }: RevenueReportProps) => {
         .select('created_at, status, delivery_fee_usd, delivery_fee_lbp')
         .gte('created_at', dateFrom)
         .lte('created_at', dateTo + 'T23:59:59');
-      
+
       if (error) throw error;
       return data;
     },
@@ -44,7 +44,7 @@ export const RevenueReport = ({ dateFrom, dateTo }: RevenueReportProps) => {
         `)
         .gte('date', dateFrom)
         .lte('date', dateTo);
-      
+
       if (error) throw error;
       return data;
     },
@@ -53,24 +53,24 @@ export const RevenueReport = ({ dateFrom, dateTo }: RevenueReportProps) => {
   // Daily revenue/expense trend
   const dailyData = (() => {
     if (!ordersData) return [];
-    
+
     const days = eachDayOfInterval({
       start: parseISO(dateFrom),
       end: parseISO(dateTo),
     });
-    
+
     return days.map(day => {
       const dayStr = format(day, 'yyyy-MM-dd');
-      
-      const dayOrders = ordersData.filter(o => 
-        o.status === 'Delivered' && 
+
+      const dayOrders = ordersData.filter(o =>
+        (o.status === 'Delivered' || o.status === 'DriverCollected') &&
         format(new Date(o.created_at!), 'yyyy-MM-dd') === dayStr
       );
       const revenue = dayOrders.reduce((sum, o) => sum + Number(o.delivery_fee_usd || 0), 0);
-      
+
       const dayExpenses = expensesData?.filter(e => e.date === dayStr) || [];
       const expenses = dayExpenses.reduce((sum, e) => sum + Number(e.amount_usd || 0), 0);
-      
+
       return {
         date: format(day, 'MMM dd'),
         revenue,
@@ -83,7 +83,7 @@ export const RevenueReport = ({ dateFrom, dateTo }: RevenueReportProps) => {
   // Expense by category
   const expenseByCategory = (() => {
     if (!expensesData) return [];
-    
+
     const categoryTotals: Record<string, { amount: number; group: string }> = {};
     expensesData.forEach((e: any) => {
       const categoryName = e.expense_categories?.name || 'Unknown';
@@ -93,7 +93,7 @@ export const RevenueReport = ({ dateFrom, dateTo }: RevenueReportProps) => {
       }
       categoryTotals[categoryName].amount += Number(e.amount_usd || 0);
     });
-    
+
     return Object.entries(categoryTotals)
       .map(([name, data]) => ({
         name,
@@ -110,9 +110,9 @@ export const RevenueReport = ({ dateFrom, dateTo }: RevenueReportProps) => {
     expenseByCategory.forEach(c => {
       groupTotals[c.group] = (groupTotals[c.group] || 0) + c.value;
     });
-    
+
     const colors = ['#ef4444', '#f59e0b', '#8b5cf6', '#3b82f6', '#22c55e', '#06b6d4', '#ec4899'];
-    
+
     return Object.entries(groupTotals)
       .map(([name, value], index) => ({
         name,
@@ -124,9 +124,9 @@ export const RevenueReport = ({ dateFrom, dateTo }: RevenueReportProps) => {
 
   // Summary calculations
   const totalRevenue = ordersData
-    ?.filter(o => o.status === 'Delivered')
+    ?.filter(o => o.status === 'Delivered' || o.status === 'DriverCollected')
     .reduce((sum, o) => sum + Number(o.delivery_fee_usd || 0), 0) || 0;
-  
+
   const totalExpenses = expensesData?.reduce((sum, e) => sum + Number(e.amount_usd || 0), 0) || 0;
   const netProfit = totalRevenue - totalExpenses;
 
@@ -200,9 +200,9 @@ export const RevenueReport = ({ dateFrom, dateTo }: RevenueReportProps) => {
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                 <XAxis dataKey="date" className="text-xs" />
                 <YAxis className="text-xs" />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: 'hsl(var(--card))', 
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'hsl(var(--card))',
                     border: '1px solid hsl(var(--border))',
                     borderRadius: '8px',
                   }}

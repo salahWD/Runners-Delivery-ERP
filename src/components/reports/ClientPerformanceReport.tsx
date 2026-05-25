@@ -26,7 +26,7 @@ export const ClientPerformanceReport = ({ dateFrom, dateTo }: ClientPerformanceR
         .from('clients')
         .select('*')
         .order('name');
-      
+
       if (error) throw error;
       return data;
     },
@@ -40,7 +40,7 @@ export const ClientPerformanceReport = ({ dateFrom, dateTo }: ClientPerformanceR
         .select('client_id, status, delivery_fee_usd, order_amount_usd, client_type')
         .gte('created_at', dateFrom)
         .lte('created_at', dateTo + 'T23:59:59');
-      
+
       if (error) throw error;
       return data;
     },
@@ -54,7 +54,7 @@ export const ClientPerformanceReport = ({ dateFrom, dateTo }: ClientPerformanceR
         .select('client_id, type, amount_usd')
         .gte('ts', dateFrom)
         .lte('ts', dateTo + 'T23:59:59');
-      
+
       if (error) throw error;
       return data;
     },
@@ -62,19 +62,19 @@ export const ClientPerformanceReport = ({ dateFrom, dateTo }: ClientPerformanceR
 
   const clientStats = (() => {
     if (!clients || !ordersData) return [];
-    
+
     return clients.map(client => {
       const clientOrders = ordersData.filter(o => o.client_id === client.id);
-      const deliveredOrders = clientOrders.filter(o => o.status === 'Delivered');
+      const deliveredOrders = clientOrders.filter(o => o.status === 'Delivered' || o.status === 'DriverCollected');
       const totalDeliveryFees = deliveredOrders.reduce((sum, o) => sum + Number(o.delivery_fee_usd || 0), 0);
       const totalOrderAmount = deliveredOrders.reduce((sum, o) => sum + Number(o.order_amount_usd || 0), 0);
-      
+
       const clientTxs = transactionsData?.filter(t => t.client_id === client.id) || [];
       const balance = clientTxs.reduce((sum, t) => {
         const multiplier = t.type === 'Credit' ? 1 : -1;
         return sum + Number(t.amount_usd || 0) * multiplier;
       }, 0);
-      
+
       return {
         id: client.id,
         name: client.name,
@@ -92,13 +92,13 @@ export const ClientPerformanceReport = ({ dateFrom, dateTo }: ClientPerformanceR
   // Client type breakdown
   const clientTypeData = (() => {
     if (!ordersData) return [];
-    
+
     const typeCounts: Record<string, number> = {};
     ordersData.forEach(o => {
       const type = o.client_type || 'Unknown';
       typeCounts[type] = (typeCounts[type] || 0) + 1;
     });
-    
+
     return Object.entries(typeCounts).map(([name, value]) => ({
       name,
       value,
@@ -146,9 +146,9 @@ export const ClientPerformanceReport = ({ dateFrom, dateTo }: ClientPerformanceR
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                   <XAxis type="number" className="text-xs" />
                   <YAxis dataKey="name" type="category" width={100} className="text-xs" />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'hsl(var(--card))', 
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'hsl(var(--card))',
                       border: '1px solid hsl(var(--border))',
                       borderRadius: '8px',
                     }}
@@ -222,7 +222,7 @@ export const ClientPerformanceReport = ({ dateFrom, dateTo }: ClientPerformanceR
                     <TableRow key={client.id}>
                       <TableCell className="font-medium">{client.name}</TableCell>
                       <TableCell>
-                        <Badge 
+                        <Badge
                           variant="outline"
                           style={{ borderColor: CLIENT_TYPE_COLORS[client.type] }}
                         >

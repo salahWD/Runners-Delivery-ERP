@@ -14,7 +14,7 @@ export const BalancesReport = () => {
         .from('drivers')
         .select('id, name, wallet_usd, wallet_lbp, active')
         .order('name');
-      
+
       if (error) throw error;
       return data;
     },
@@ -27,13 +27,13 @@ export const BalancesReport = () => {
         .from('clients')
         .select('id, name, type')
         .order('name');
-      
+
       if (clientsError) throw clientsError;
 
       const { data: transactions, error: txError } = await supabase
         .from('client_transactions')
         .select('client_id, type, amount_usd, amount_lbp');
-      
+
       if (txError) throw txError;
 
       return clients.map(client => {
@@ -46,7 +46,7 @@ export const BalancesReport = () => {
           const multiplier = t.type === 'Credit' ? 1 : -1;
           return sum + Number(t.amount_lbp || 0) * multiplier;
         }, 0);
-        
+
         return {
           ...client,
           balanceUsd,
@@ -65,7 +65,7 @@ export const BalancesReport = () => {
         .order('date', { ascending: false })
         .limit(1)
         .maybeSingle();
-      
+
       if (error) throw error;
       return data;
     },
@@ -73,13 +73,13 @@ export const BalancesReport = () => {
 
   const totalDriverWalletUsd = drivers?.reduce((sum, d) => sum + Number(d.wallet_usd || 0), 0) || 0;
   const totalDriverWalletLbp = drivers?.reduce((sum, d) => sum + Number(d.wallet_lbp || 0), 0) || 0;
-  
-  const driversOwingUs = drivers?.filter(d => Number(d.wallet_usd || 0) < 0 || Number(d.wallet_lbp || 0) < 0) || [];
-  const driversWeOwe = drivers?.filter(d => Number(d.wallet_usd || 0) > 0 || Number(d.wallet_lbp || 0) > 0) || [];
-  
+
+  const driversOwingUs = drivers?.filter(d => Number(d.wallet_usd || 0) > 0 || Number(d.wallet_lbp || 0) > 0) || [];
+  const driversWeOwe = drivers?.filter(d => Number(d.wallet_usd || 0) < 0 || Number(d.wallet_lbp || 0) < 0) || [];
+
   const totalClientBalanceUsd = clientBalances?.reduce((sum, c) => sum + c.balanceUsd, 0) || 0;
   const totalClientBalanceLbp = clientBalances?.reduce((sum, c) => sum + c.balanceLbp, 0) || 0;
-  
+
   const clientsOwingUs = clientBalances?.filter(c => c.balanceUsd < 0 || c.balanceLbp < 0) || [];
   const clientsWeOwe = clientBalances?.filter(c => c.balanceUsd > 0 || c.balanceLbp > 0) || [];
 

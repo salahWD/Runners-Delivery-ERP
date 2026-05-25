@@ -18,7 +18,7 @@ export const KPICards = ({ dateFrom, dateTo }: KPICardsProps) => {
         .select('id, status, delivery_fee_usd, delivery_fee_lbp, order_amount_usd, order_amount_lbp, fulfillment')
         .gte('created_at', dateFrom)
         .lte('created_at', dateTo + 'T23:59:59');
-      
+
       if (error) throw error;
       return data;
     },
@@ -31,7 +31,7 @@ export const KPICards = ({ dateFrom, dateTo }: KPICardsProps) => {
         .from('drivers')
         .select('*', { count: 'exact', head: true })
         .eq('active', true);
-      
+
       if (error) throw error;
       return count || 0;
     },
@@ -43,7 +43,7 @@ export const KPICards = ({ dateFrom, dateTo }: KPICardsProps) => {
       const { count, error } = await supabase
         .from('clients')
         .select('*', { count: 'exact', head: true });
-      
+
       if (error) throw error;
       return count || 0;
     },
@@ -57,25 +57,25 @@ export const KPICards = ({ dateFrom, dateTo }: KPICardsProps) => {
         .select('amount_usd, amount_lbp')
         .gte('date', dateFrom)
         .lte('date', dateTo);
-      
+
       if (error) throw error;
       return data;
     },
   });
 
   const totalOrders = ordersData?.length || 0;
-  const deliveredOrders = ordersData?.filter(o => o.status === 'Delivered').length || 0;
+  const deliveredOrders = ordersData?.filter(o => o.status === 'Delivered' || o.status === 'DriverCollected').length || 0;
   const cancelledOrders = ordersData?.filter(o => o.status === 'Cancelled' || o.status === 'Returned').length || 0;
   const inHouseOrders = ordersData?.filter(o => o.fulfillment === 'InHouse').length || 0;
-  
+
   const totalRevenue = ordersData?.reduce((sum, o) => sum + Number(o.delivery_fee_usd || 0), 0) || 0;
   const totalCollected = ordersData
-    ?.filter(o => o.status === 'Delivered')
+    ?.filter(o => o.status === 'Delivered' || o.status === 'DriverCollected')
     .reduce((sum, o) => sum + Number(o.order_amount_usd || 0) + Number(o.delivery_fee_usd || 0), 0) || 0;
-  
+
   const totalExpenses = expensesData?.reduce((sum, e) => sum + Number(e.amount_usd || 0), 0) || 0;
   const netProfit = totalRevenue - totalExpenses;
-  
+
   const deliveryRate = totalOrders > 0 ? ((deliveredOrders / totalOrders) * 100).toFixed(1) : '0';
 
   const kpis = [

@@ -28,12 +28,11 @@ export function PaymentHistoryTab() {
     queryKey: ['client-payments', selectedClient],
     queryFn: async () => {
       let query = supabase
-        .from('client_payments')
-        .select(`
-          *,
-          clients(name)
-        `)
-        .order('payment_date', { ascending: false });
+        .from('client_transactions')
+        .select('*, clients(name)')
+        .eq('type', 'Credit')
+        .is('order_ref', null)
+        .order('ts', { ascending: false });
 
       if (selectedClient !== 'all') {
         query = query.eq('client_id', selectedClient);
@@ -106,34 +105,29 @@ export function PaymentHistoryTab() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Statement ID</TableHead>
+                    {/* <TableHead>ID</TableHead> */}
                     <TableHead>Client</TableHead>
                     <TableHead>Payment Date</TableHead>
-                    <TableHead>Period</TableHead>
                     <TableHead>Amount USD</TableHead>
                     <TableHead>Amount LBP</TableHead>
-                    <TableHead>Method</TableHead>
-                    <TableHead>Orders</TableHead>
                     <TableHead>Notes</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {payments.map((payment: any) => (
                     <TableRow key={payment.id}>
-                      <TableCell>
+                      {/* <TableCell>
                         <div className="flex items-center gap-2">
                           <FileText className="h-4 w-4 text-muted-foreground" />
                           <span className="font-mono text-sm">{payment.statement_id}</span>
                         </div>
-                      </TableCell>
+                      </TableCell> */}
                       <TableCell className="font-medium">
                         {payment.clients?.name}
                       </TableCell>
                       <TableCell>
-                        {format(new Date(payment.payment_date), 'MMM dd, yyyy HH:mm')}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {format(new Date(payment.period_from), 'MMM dd')} - {format(new Date(payment.period_to), 'MMM dd, yyyy')}
+                        {format(new Date(payment.ts), 'MMM dd, yyyy HH:mm')}
+                        {/* {payment.ts} */}
                       </TableCell>
                       <TableCell className="font-medium">
                         ${Number(payment.amount_usd).toFixed(2)}
@@ -141,18 +135,8 @@ export function PaymentHistoryTab() {
                       <TableCell>
                         {Number(payment.amount_lbp).toLocaleString()} LL
                       </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="capitalize">
-                          {payment.payment_method?.replace('_', ' ')}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">
-                          {payment.order_refs?.length || 0} orders
-                        </Badge>
-                      </TableCell>
                       <TableCell className="max-w-[200px] truncate text-sm text-muted-foreground">
-                        {payment.notes || '—'}
+                        {payment.note || '—'}
                       </TableCell>
                     </TableRow>
                   ))}

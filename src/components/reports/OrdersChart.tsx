@@ -29,7 +29,7 @@ export const OrdersChart = ({ dateFrom, dateTo }: OrdersChartProps) => {
         .gte('created_at', dateFrom)
         .lte('created_at', dateTo + 'T23:59:59')
         .order('created_at');
-      
+
       if (error) throw error;
       return data;
     },
@@ -38,18 +38,18 @@ export const OrdersChart = ({ dateFrom, dateTo }: OrdersChartProps) => {
   // Prepare daily data
   const dailyData = (() => {
     if (!ordersData) return [];
-    
+
     const days = eachDayOfInterval({
       start: parseISO(dateFrom),
       end: parseISO(dateTo),
     });
-    
+
     return days.map(day => {
       const dayStr = format(day, 'yyyy-MM-dd');
-      const dayOrders = ordersData.filter(o => 
+      const dayOrders = ordersData.filter(o =>
         format(new Date(o.created_at!), 'yyyy-MM-dd') === dayStr
       );
-      
+
       return {
         date: format(day, 'MMM dd'),
         total: dayOrders.length,
@@ -63,13 +63,13 @@ export const OrdersChart = ({ dateFrom, dateTo }: OrdersChartProps) => {
   // Prepare status breakdown
   const statusData = (() => {
     if (!ordersData) return [];
-    
+
     const statusCounts: Record<string, number> = {};
     ordersData.forEach(o => {
       const status = o.status || 'Unknown';
       statusCounts[status] = (statusCounts[status] || 0) + 1;
     });
-    
+
     return Object.entries(statusCounts).map(([name, value]) => ({
       name,
       value,
@@ -80,10 +80,10 @@ export const OrdersChart = ({ dateFrom, dateTo }: OrdersChartProps) => {
   // Fulfillment breakdown
   const fulfillmentData = (() => {
     if (!ordersData) return [];
-    
+
     const inHouse = ordersData.filter(o => o.fulfillment === 'InHouse').length;
     const thirdParty = ordersData.filter(o => o.fulfillment === 'ThirdParty').length;
-    
+
     return [
       { name: 'In-House', value: inHouse, color: '#3b82f6' },
       { name: 'Third Party', value: thirdParty, color: '#f59e0b' },
@@ -127,9 +127,9 @@ export const OrdersChart = ({ dateFrom, dateTo }: OrdersChartProps) => {
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                 <XAxis dataKey="date" className="text-xs" />
                 <YAxis className="text-xs" />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: 'hsl(var(--card))', 
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'hsl(var(--card))',
                     border: '1px solid hsl(var(--border))',
                     borderRadius: '8px',
                   }}
@@ -159,7 +159,7 @@ export const OrdersChart = ({ dateFrom, dateTo }: OrdersChartProps) => {
                   cy="50%"
                   outerRadius={100}
                   dataKey="value"
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  label={({ name, percent }) => `${name == "DriverCollected" ? "Delivered" : name} ${(percent * 100).toFixed(0)}%`}
                   labelLine={false}
                 >
                   {statusData.map((entry, index) => (
